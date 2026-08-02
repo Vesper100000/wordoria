@@ -1,4 +1,4 @@
-﻿import type { NextConfig } from "next";
+import type { NextConfig } from "next";
 
 const isGitHubPages = process.env.GITHUB_PAGES === "true";
 const githubPagesBasePath = process.env.GITHUB_PAGES_BASE_PATH ?? "";
@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
         assetPrefix: githubPagesBasePath ? `${githubPagesBasePath}/` : undefined,
         images: { unoptimized: true },
         trailingSlash: true,
+        typescript: { tsconfigPath: "tsconfig.github.json" },
       }
     : {}),
 };
