@@ -25,6 +25,31 @@ type WordRecord = {
   correct: number;
   missed: number;
   last: string;
+  strength?: number;
+  strengthUpdatedAt?: number;
+  lastReviewedAt?: number;
+  lastEncounterAt?: number;
+  lastExposureDay?: string;
+  correctStreak?: number;
+  encounters?: number;
+};
+
+type MemoryTier = {
+  label: "DORMANT" | "TRACE" | "FAMILIAR" | "ROOTED";
+  level: 1 | 2 | 3 | 4;
+  min: number;
+  max: number;
+  saturation: number;
+  graceDays: number;
+  decayPerDay: number;
+};
+
+type MemoryAnimation = {
+  word: string;
+  kind: "gain" | "loss";
+  fromSaturation: number;
+  toSaturation: number;
+  id: number;
 };
 
 type SavedStudyState = {
@@ -2670,6 +2695,117 @@ const learningTracks = [
 type Track = (typeof learningTracks)[number];
 
 const STORAGE_KEY = "wordoria-study-state-v2";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MEMORY_TIERS: MemoryTier[] = [
+  { label: "DORMANT", level: 1, min: 0, max: 19, saturation: 0, graceDays: 1, decayPerDay: 5 },
+  { label: "TRACE", level: 2, min: 20, max: 44, saturation: 0.25, graceDays: 2, decayPerDay: 4 },
+  { label: "FAMILIAR", level: 3, min: 45, max: 74, saturation: 0.6, graceDays: 7, decayPerDay: 2.5 },
+  { label: "ROOTED", level: 4, min: 75, max: 100, saturation: 1, graceDays: 14, decayPerDay: 1.5 },
+];
+
+function clampMemory(value: number) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function getLocalDayStamp(timestamp: number) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getMemoryTier(strength: number) {
+  return MEMORY_TIERS.find((tier) => strength >= tier.min && strength <= tier.max) ?? MEMORY_TIERS[0];
+}
+
+function getStoredStrength(record?: WordRecord) {
+  if (!record) return 0;
+  if (typeof record.strength === "number") return clampMemory(record.strength);
+
+  // Older saved records did not include memory strength, so infer it without erasing progress.
+  return clampMemory(record.correct * 22 - record.missed * 14 + Math.max(0, record.seen - record.correct) * 2);
+}
+
+function getEffectiveStrength(record?: WordRecord, now = 0) {
+  const storedStrength = getStoredStrength(record);
+  if (!record || !now) return storedStrength;
+
+  const updatedAt = record.strengthUpdatedAt ?? record.lastReviewedAt;
+  if (!updatedAt || updatedAt >= now) return storedStrength;
+
+  const tier = getMemoryTier(storedStrength);
+  const elapsedDays = (now - updatedAt) / DAY_MS;
+  const decayingDays = Math.max(0, elapsedDays - tier.graceDays);
+  return clampMemory(storedStrength - decayingDays * tier.decayPerDay);
+}
+
+function getMemoryPresentation(record?: WordRecord, now = 0) {
+  const strength = getEffectiveStrength(record, now);
+  const tier = getMemoryTier(strength);
+  return { strength, tier, saturation: tier.saturation };
+}
+
+function createEmptyRecord(): WordRecord {
+  return { seen: 0, correct: 0, missed: 0, last: "New", strength: 0, correctStreak: 0, encounters: 0 };
+}
+
+function recordDailyEncounter(record: WordRecord | undefined, now: number) {
+  const existing = record ?? createEmptyRecord();
+  const dayStamp = getLocalDayStamp(now);
+  if (existing.lastExposureDay === dayStamp) return existing;
+
+  const hasBeenReviewed = Boolean(existing.lastReviewedAt || existing.seen > 0);
+  const strength = hasBeenReviewed
+    ? getStoredStrength(existing)
+    : Math.min(18, getStoredStrength(existing) + 2);
+
+  return {
+    ...existing,
+    strength,
+    strengthUpdatedAt: hasBeenReviewed ? existing.strengthUpdatedAt : now,
+    lastEncounterAt: now,
+    lastExposureDay: dayStamp,
+    encounters: (existing.encounters ?? 0) + 1,
+  };
+}
+
+function answerWord(record: WordRecord | undefined, correct: boolean, now: number) {
+  const existing = record ?? createEmptyRecord();
+  const effectiveStrength = getEffectiveStrength(existing, now);
+  const currentTier = getMemoryTier(effectiveStrength);
+  const currentTierIndex = MEMORY_TIERS.findIndex((tier) => tier.level === currentTier.level);
+  const dayStamp = getLocalDayStamp(now);
+  const sameDay = existing.lastReviewedAt ? getLocalDayStamp(existing.lastReviewedAt) === dayStamp : false;
+  const daysSinceReview = existing.lastReviewedAt ? Math.max(0, (now - existing.lastReviewedAt) / DAY_MS) : 0;
+  const correctStreak = correct ? (existing.correctStreak ?? 0) + 1 : 0;
+
+  let strength: number;
+  if (correct) {
+    const gain = sameDay
+      ? 7
+      : 22 + Math.min(8, daysSinceReview * 1.5) + Math.min(6, Math.max(0, correctStreak - 1) * 2);
+    strength = clampMemory(effectiveStrength + gain);
+
+    // Repeated answers on one day can reinforce a tier, but cannot rush into the next one.
+    if (sameDay) strength = Math.min(strength, currentTier.max);
+  } else {
+    const lowerTierMax = currentTierIndex > 0 ? MEMORY_TIERS[currentTierIndex - 1].max : 0;
+    strength = Math.min(clampMemory(effectiveStrength - 22), lowerTierMax);
+  }
+
+  return {
+    ...existing,
+    seen: existing.seen + 1,
+    correct: existing.correct + (correct ? 1 : 0),
+    missed: existing.missed + (correct ? 0 : 1),
+    last: correct ? "Strengthened" : "Needs review",
+    strength,
+    strengthUpdatedAt: now,
+    lastReviewedAt: now,
+    lastEncounterAt: now,
+    lastExposureDay: dayStamp,
+    correctStreak,
+    encounters: (existing.encounters ?? 0) + 1,
+  } satisfies WordRecord;
+}
 
 function shuffleArray<T>(items: T[]) {
   return [...items].sort(() => Math.random() - 0.5);
@@ -2922,6 +3058,9 @@ export default function Home() {
   const [storageReady, setStorageReady] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicUnavailable, setMusicUnavailable] = useState(false);
+  const [memoryNow, setMemoryNow] = useState(0);
+  const [memoryAnimation, setMemoryAnimation] = useState<MemoryAnimation | null>(null);
+  const pendingMemoryAnimationRef = useRef<MemoryAnimation | null>(null);
 
   const activeTrack = activeTrackIndex === null ? null : learningTracks[activeTrackIndex];
   const activeQuestion = taskQueue[taskStep] ?? null;
@@ -2946,6 +3085,12 @@ export default function Home() {
   }, [activeTrackIndex]);
 
   const closeAll = () => {
+    const pendingAnimation = pendingMemoryAnimationRef.current;
+    if (selected && pendingAnimation?.word === selected.word) {
+      setMemoryAnimation({ ...pendingAnimation, id: Date.now() });
+      pendingMemoryAnimationRef.current = null;
+    }
+
     setSelected(null);
     setMenuOpen(false);
     setActiveTrackIndex(null);
@@ -2973,6 +3118,42 @@ export default function Home() {
       setStorageReady(true);
     }
   }, []);
+
+  useEffect(() => {
+    const refreshMemoryClock = () => setMemoryNow(Date.now());
+    refreshMemoryClock();
+    const clock = window.setInterval(refreshMemoryClock, 60 * 60 * 1000);
+    return () => window.clearInterval(clock);
+  }, []);
+
+  useEffect(() => {
+    if (!memoryAnimation) return;
+    const timeout = window.setTimeout(() => setMemoryAnimation(null), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [memoryAnimation]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+
+    const now = Date.now();
+    const activeCollection = photographCollections[journalPage] ?? photographCollections[0];
+    setMemoryNow(now);
+    setRecords((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      activeCollection.forEach((photo) => {
+        const existing = current[photo.word];
+        const encountered = recordDailyEncounter(existing, now);
+        if (encountered !== existing) {
+          next[photo.word] = encountered;
+          changed = true;
+        }
+      });
+
+      return changed ? next : current;
+    });
+  }, [journalPage, storageReady]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -3040,18 +3221,27 @@ export default function Home() {
   }, []);
 
   const updateRecord = (word: string, correct: boolean) => {
-    setRecords((current) => {
-      const existing = current[word] ?? { seen: 0, correct: 0, missed: 0, last: "New" };
-      return {
-        ...current,
-        [word]: {
-          seen: existing.seen + 1,
-          correct: existing.correct + (correct ? 1 : 0),
-          missed: existing.missed + (correct ? 0 : 1),
-          last: correct ? "Strengthened" : "Needs review",
-        },
+    const now = Date.now();
+    const existing = records[word];
+    const before = getMemoryPresentation(existing, now);
+    const answered = answerWord(existing, correct, now);
+    const after = getMemoryPresentation(answered, now);
+
+    if (selected?.word === word) {
+      pendingMemoryAnimationRef.current = {
+        word,
+        kind: correct ? "gain" : "loss",
+        fromSaturation: before.saturation,
+        toSaturation: after.saturation,
+        id: now,
       };
-    });
+    }
+
+    setMemoryNow(now);
+    setRecords((current) => ({
+      ...current,
+      [word]: answerWord(current[word], correct, now),
+    }));
   };
 
   const toggleSave = (word: string) => {
@@ -3279,14 +3469,51 @@ export default function Home() {
           <button onClick={() => turnJournalPage(1)}>Next collection</button>
         </div>
         <div className="photo-grid" key={journalPage}>
-          {activeJournal.map((photo, index) => (
-            <article className={`photo-card photo-${index + 1}`} data-photo-id={photo.id} key={photo.id}>
-              <button className="photo-button" onClick={() => { setSelected(photo); setStudyAnswer(null); }} aria-label={`Study ${photo.word}`}>
-                <span className="photo-frame"><img src={photo.image} alt={photo.title} /><i>VIEW STUDY -&gt;</i></span>
-                <span className="photo-meta"><small>{photo.id} / {photo.category} / {wordLevelGlossary[photo.word]}</small><strong>{photo.title}</strong><em>{photo.word}</em></span>
-              </button>
-            </article>
-          ))}
+          {activeJournal.map((photo, index) => {
+            const memory = getMemoryPresentation(records[photo.word], memoryNow);
+            const animatedMemory = memoryAnimation?.word === photo.word ? memoryAnimation : null;
+            const fromSaturation = animatedMemory?.fromSaturation ?? memory.saturation;
+            const toSaturation = animatedMemory?.toSaturation ?? memory.saturation;
+            const memoryStyle = {
+              "--memory-gray": (1 - memory.saturation).toFixed(2),
+              "--memory-filter-saturation": (0.55 + memory.saturation * 0.63).toFixed(2),
+              "--memory-brightness": (0.88 + memory.saturation * 0.14).toFixed(2),
+              "--memory-from-gray": (1 - fromSaturation).toFixed(2),
+              "--memory-from-filter-saturation": (0.55 + fromSaturation * 0.63).toFixed(2),
+              "--memory-from-brightness": (0.88 + fromSaturation * 0.14).toFixed(2),
+              "--memory-to-gray": (1 - toSaturation).toFixed(2),
+              "--memory-to-filter-saturation": (0.55 + toSaturation * 0.63).toFixed(2),
+              "--memory-to-brightness": (0.88 + toSaturation * 0.14).toFixed(2),
+            } as CSSProperties;
+
+            return (
+              <article
+                className={"photo-card photo-" + (index + 1) + (animatedMemory ? " memory-" + animatedMemory.kind : "")}
+                data-memory={memory.tier.label.toLowerCase()}
+                data-photo-id={photo.id}
+                key={photo.id}
+              >
+                <button
+                  className="photo-button"
+                  style={memoryStyle}
+                  onClick={() => {
+                    pendingMemoryAnimationRef.current = null;
+                    setSelected(photo);
+                    setStudyAnswer(null);
+                  }}
+                  aria-label={"Study " + photo.word + ". Memory " + memory.tier.level + " " + memory.tier.label}
+                >
+                  <span className="photo-frame"><img src={photo.image} alt={photo.title} /><i>VIEW STUDY -&gt;</i></span>
+                  <span className="photo-meta">
+                    <small>{photo.id} / {photo.category} / {wordLevelGlossary[photo.word]}</small>
+                    <strong>{photo.title}</strong>
+                    <em>{photo.word}</em>
+                    <span className="memory-status">MEMORY {String(memory.tier.level).padStart(2, "0")} / {memory.tier.label}</span>
+                  </span>
+                </button>
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -3437,6 +3664,7 @@ export default function Home() {
                   <button
                     key={option}
                     className={studyAnswer === option ? (option === selected.word ? "correct" : "incorrect") : ""}
+                    disabled={studyAnswer !== null}
                     onClick={() => {
                       setStudyAnswer(option);
                       updateRecord(selected.word, option === selected.word);

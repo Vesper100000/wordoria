@@ -48,3 +48,39 @@ html,body{overflow-x:clip!important}main{overflow:visible!important;perspective:
 .record-phonetic{display:block;margin:6px 0 10px;font:12px/1.2 Georgia,serif!important;color:#7a7a72;letter-spacing:.02em}.meaning-phonetic{display:inline-block;margin:0 5px;color:#6b6b63;font-family:Georgia,serif;font-style:italic}.phonetic{font-style:italic}
 
 .level-tag{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(17,17,15,.45);border-radius:999px;padding:5px 8px;margin:6px 8px 6px 0;font:800 8px/1 Arial,Helvetica,sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--ink);background:rgba(255,255,255,.42)}.level-cet-4{background:#f7ff6a;border-color:#111}.level-cet-6{background:#dcd3ff;border-color:#705cff;color:#21135f}.level-contest{background:#111;color:#f7ff6a;border-color:#111}.level-visual{background:#ffd9cf;border-color:#ff6f55;color:#5b170c}.level-advanced{background:#111;color:#fff;border-color:#111}.record-card .level-tag,.task-feedback .level-tag,.study-copy>.level-tag{margin-top:4px;margin-bottom:10px}.archive-stats{flex-wrap:wrap;gap:18px 0}.archive-stats span{min-width:96px}
+
+/* Memory color system: desktop reveals recall strength on hover; touch surfaces show it directly. */
+.photo-button{--memory-gray:1;--memory-filter-saturation:.55;--memory-brightness:.88;--memory-from-gray:1;--memory-from-filter-saturation:.55;--memory-from-brightness:.88;--memory-to-gray:1;--memory-to-filter-saturation:.55;--memory-to-brightness:.88}
+.photo-button .photo-frame img{filter:grayscale(1) saturate(.55) contrast(1.08) brightness(.88);transition:transform .7s cubic-bezier(.16,.8,.2,1),filter 1s cubic-bezier(.16,.8,.2,1)}
+.photo-meta .memory-status{grid-column:1/-1;display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font:800 8px/1 Arial,Helvetica,sans-serif;letter-spacing:.14em;color:#67675f;text-transform:uppercase}
+.challenge button:disabled{cursor:default}.challenge button:disabled:not(.correct):not(.incorrect){opacity:.45}
+
+@media (hover:hover) and (pointer:fine){
+  .photo-button:hover .photo-frame img,.photo-button:focus-visible .photo-frame img{filter:grayscale(var(--memory-gray)) saturate(var(--memory-filter-saturation)) contrast(1.05) brightness(var(--memory-brightness))}
+  .photo-card.memory-gain .photo-frame img{animation:memory-bloom-desktop 1.35s cubic-bezier(.16,.8,.2,1)}
+  .photo-card.memory-loss .photo-frame img{animation:memory-fade-desktop 1.2s cubic-bezier(.16,.8,.2,1)}
+}
+
+@media (hover:none),(pointer:coarse){
+  .photo-button .photo-frame img{filter:grayscale(var(--memory-gray)) saturate(var(--memory-filter-saturation)) contrast(1.05) brightness(var(--memory-brightness))}
+  .photo-button:active .photo-frame img{transform:scale(1.025)}
+  .photo-card.memory-gain .photo-frame img{animation:memory-shift-gain 1s cubic-bezier(.16,.8,.2,1)}
+  .photo-card.memory-loss .photo-frame img{animation:memory-shift-loss 1.2s cubic-bezier(.16,.8,.2,1)}
+}
+
+@keyframes memory-bloom-desktop{
+  0%,12%,100%{filter:grayscale(1) saturate(.55) contrast(1.08) brightness(.88)}
+  70%{filter:grayscale(var(--memory-to-gray)) saturate(var(--memory-to-filter-saturation)) contrast(1.05) brightness(var(--memory-to-brightness))}
+}
+@keyframes memory-fade-desktop{
+  from{filter:grayscale(var(--memory-from-gray)) saturate(var(--memory-from-filter-saturation)) contrast(1.05) brightness(var(--memory-from-brightness))}
+  to{filter:grayscale(1) saturate(.55) contrast(1.08) brightness(.88)}
+}
+@keyframes memory-shift-gain{
+  from{filter:grayscale(var(--memory-from-gray)) saturate(var(--memory-from-filter-saturation)) contrast(1.05) brightness(var(--memory-from-brightness))}
+  to{filter:grayscale(var(--memory-to-gray)) saturate(var(--memory-to-filter-saturation)) contrast(1.05) brightness(var(--memory-to-brightness))}
+}
+@keyframes memory-shift-loss{
+  from{filter:grayscale(var(--memory-from-gray)) saturate(var(--memory-from-filter-saturation)) contrast(1.05) brightness(var(--memory-from-brightness))}
+  to{filter:grayscale(var(--memory-to-gray)) saturate(var(--memory-to-filter-saturation)) contrast(1.05) brightness(var(--memory-to-brightness))}
+}
