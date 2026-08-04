@@ -2904,6 +2904,7 @@ function HeroLiquidField() {
 }
 
 export default function Home() {
+  const musicRef = useRef<HTMLAudioElement>(null);
   const [selected, setSelected] = useState<Photograph | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [records, setRecords] = useState<Record<string, WordRecord>>({});
@@ -2919,6 +2920,8 @@ export default function Home() {
   const [sessionWords, setSessionWords] = useState<string[]>([]);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicUnavailable, setMusicUnavailable] = useState(false);
 
   const activeTrack = activeTrackIndex === null ? null : learningTracks[activeTrackIndex];
   const activeQuestion = taskQueue[taskStep] ?? null;
@@ -2991,6 +2994,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const music = musicRef.current;
+    if (!music) return;
+    music.volume = 0.2;
+    return () => music.pause();
+  }, []);
+
+  useEffect(() => {
     const updateScrollZoom = () => {
       const hero = document.querySelector<HTMLElement>(".hero");
       const viewport = Math.max(window.innerHeight, 1);
@@ -3053,6 +3063,23 @@ export default function Home() {
     const bounds = event.currentTarget.getBoundingClientRect();
     event.currentTarget.style.setProperty("--mx", `${event.clientX - bounds.left}px`);
     event.currentTarget.style.setProperty("--my", `${event.clientY - bounds.top}px`);
+  };
+
+  const toggleMusic = async () => {
+    const music = musicRef.current;
+    if (!music || musicUnavailable) return;
+
+    if (!music.paused) {
+      music.pause();
+      return;
+    }
+
+    try {
+      await music.play();
+    } catch {
+      setMusicUnavailable(true);
+      setMusicPlaying(false);
+    }
   };
 
   const moveWordLight = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -3165,11 +3192,35 @@ export default function Home() {
 
   return (
     <main>
+      <audio
+        ref={musicRef}
+        loop
+        preload="none"
+        onPlay={() => setMusicPlaying(true)}
+        onPause={() => setMusicPlaying(false)}
+        onError={() => setMusicUnavailable(true)}
+      >
+        <source src="https://upload.wikimedia.org/wikipedia/commons/transcoded/e/e8/FChopinPreludeOp28n4.OGG/FChopinPreludeOp28n4.OGG.mp3" type="audio/mpeg" />
+        <source src="https://upload.wikimedia.org/wikipedia/commons/e/e8/FChopinPreludeOp28n4.OGG" type="audio/ogg" />
+      </audio>
       <header className="nav-shell">
         <p>Vocabulary is not memorisation.<br />It is a way of seeing.</p>
-        <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>
-          MENU ::
-        </button>
+        <div className="nav-actions">
+          <button
+            className={`music-button${musicPlaying ? " is-playing" : ""}`}
+            onClick={toggleMusic}
+            aria-label={musicUnavailable ? "Piano music unavailable" : musicPlaying ? "Pause piano music" : "Play piano music"}
+            aria-pressed={musicPlaying}
+            disabled={musicUnavailable}
+            title="Chopin · Prelude in E minor"
+          >
+            <span className="music-bars" aria-hidden="true"><i /><i /><i /></span>
+            <span>{musicUnavailable ? "MUSIC OFFLINE" : musicPlaying ? "PIANO ON" : "PIANO"}</span>
+          </button>
+          <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>
+            MENU ::
+          </button>
+        </div>
       </header>
 
       <section className="hero" id="top" onPointerMove={moveHeroLight}>
@@ -3261,7 +3312,10 @@ export default function Home() {
         <a className="wordmark light" href="#top">WORDORIA<span>(R)</span></a>
         <p>A visual vocabulary practice<br />for ambitious English learners.</p>
         <div><a href="#practice">Practice</a><a href="#journal">Journal</a><a href="#archive">Lexicon</a></div>
-        <small>Photography sourced from Unsplash. (c) 2026 Wordoria.</small>
+        <small>
+          Photography sourced from Unsplash. Music: Chopin, Prelude in E Minor, performed by Porticodoro / SmartCGArt Media Productions,
+          {" "}<a href="https://commons.wikimedia.org/wiki/File:FChopinPreludeOp28n4.OGG" target="_blank" rel="noreferrer">CC BY 3.0</a>. (c) 2026 Wordoria.
+        </small>
       </footer>
 
       {menuOpen && (
