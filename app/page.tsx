@@ -3468,6 +3468,18 @@ export default function Home() {
           <span>{journalIssue} / {String(photographCollections.length).padStart(2, "0")}</span>
           <button onClick={() => turnJournalPage(1)}>Next collection</button>
         </div>
+        <aside className="memory-legend" aria-label="Memory color scale">
+          <div className="memory-legend-copy">
+            <span>MEMORY COLOR</span>
+            <p><strong>As recall strengthens, color returns.</strong><br />Time and mistakes let it fade.</p>
+          </div>
+          <ol>
+            <li><i aria-hidden="true" /><span><b>DORMANT</b><small>0%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>TRACE</b><small>25%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>FAMILIAR</b><small>60%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>ROOTED</b><small>100%</small></span></li>
+          </ol>
+        </aside>
         <div className="photo-grid" key={journalPage}>
           {activeJournal.map((photo, index) => {
             const memory = getMemoryPresentation(records[photo.word], memoryNow);
