@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import PracticeGlassScene from "./PracticeGlassScene";
 
 type WordEntry = {
   word: string;
@@ -3051,6 +3052,8 @@ export default function Home() {
   const [taskAnswer, setTaskAnswer] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState<number | null>(null);
+  const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null);
+  const [burstingTrackIndex, setBurstingTrackIndex] = useState<number | null>(null);
   const [taskStep, setTaskStep] = useState(0);
   const [taskQueue, setTaskQueue] = useState<Question[]>([]);
   const [sessionWords, setSessionWords] = useState<string[]>([]);
@@ -3061,6 +3064,7 @@ export default function Home() {
   const [memoryNow, setMemoryNow] = useState(0);
   const [memoryAnimation, setMemoryAnimation] = useState<MemoryAnimation | null>(null);
   const pendingMemoryAnimationRef = useRef<MemoryAnimation | null>(null);
+  const trackBurstTimerRef = useRef<number | null>(null);
 
   const activeTrack = activeTrackIndex === null ? null : learningTracks[activeTrackIndex];
   const activeQuestion = taskQueue[taskStep] ?? null;
@@ -3101,6 +3105,14 @@ export default function Home() {
     setTaskQueue([]);
     setSessionWords([]);
   };
+
+  useEffect(() => {
+    return () => {
+      if (trackBurstTimerRef.current !== null) {
+        window.clearTimeout(trackBurstTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -3304,6 +3316,19 @@ export default function Home() {
     setSessionWords([]);
   };
 
+  const enterTrackWithBurst = (track: Track, index: number) => {
+    if (burstingTrackIndex !== null) return;
+
+    setHoveredTrackIndex(index);
+    setBurstingTrackIndex(index);
+    trackBurstTimerRef.current = window.setTimeout(() => {
+      openTrack(track);
+      setBurstingTrackIndex(null);
+      setHoveredTrackIndex(null);
+      trackBurstTimerRef.current = null;
+    }, 480);
+  };
+
   const answerTask = (option: string) => {
     if (!activeQuestion || taskAnswer) return;
     const isCorrect = option === activeQuestion.correct;
@@ -3442,8 +3467,22 @@ export default function Home() {
           <p>Three focused exercises. Wrong answers return until they become familiar.</p>
         </div>
         <div className="task-list">
-          {learningTracks.map((task) => (
-            <button className="task-row" key={task.index} onClick={() => openTrack(task)}>
+          <PracticeGlassScene
+            activeIndex={hoveredTrackIndex}
+            burstingIndex={burstingTrackIndex}
+          />
+          {learningTracks.map((task, index) => (
+            <button
+              className="task-row"
+              data-glass-track={index}
+              key={task.index}
+              onClick={() => enterTrackWithBurst(task, index)}
+              aria-disabled={burstingTrackIndex !== null}
+              onPointerEnter={() => setHoveredTrackIndex(index)}
+              onFocus={() => setHoveredTrackIndex(index)}
+              onBlur={() => setHoveredTrackIndex(null)}
+              aria-label={task.name + ": " + task.detail}
+            >
               <span>{task.index}</span>
               <strong>{task.name}</strong>
               <small>{task.detail}</small>
@@ -3660,7 +3699,7 @@ export default function Home() {
           <div className="study-copy">
             <p className="overline">VISUAL STUDY / {selected.id}</p>
             <div className="word-title">
-              <h3>{selected.word}</h3>
+              <h3 data-word={selected.word}>{selected.word}</h3>
               <button onClick={() => toggleSave(selected.word)} aria-label="Save word">{saved.includes(selected.word) ? "SAVED" : "SAVE +"}</button>
             </div>
             <span className="phonetic">{phoneticGlossary[selected.word]} · {selected.part}</span>

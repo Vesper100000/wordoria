@@ -100,3 +100,50 @@ html,body{overflow-x:clip!important}main{overflow:visible!important;perspective:
 
 @media(max-width:900px){.memory-legend{grid-template-columns:1fr;gap:24px;margin-top:0}.memory-legend ol{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:600px){.memory-legend{gap:22px;margin:0 0 40px;padding:20px 0 22px}.memory-legend-copy p{font-size:15px}.memory-legend ol{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 12px}}
+/* True optical practice preview: one WebGL field, three editorial choices. */
+.practice{grid-template-columns:minmax(280px,.68fr) minmax(0,1.32fr);gap:5vw}
+.practice .overline{display:inline-flex;flex-direction:column;gap:9px}
+.practice .overline:after{content:"";width:68px;height:2px;background:linear-gradient(90deg,#315cff,#705cff 34%,#ed5f9e 68%,#d9e85a);transform-origin:left;animation:practice-title-line 1s cubic-bezier(.16,.8,.2,1) both}
+.practice .section-intro h2{color:transparent;background:linear-gradient(104deg,#111 0 15%,#315cff 28%,#705cff 43%,#ed5f9e 59%,#d9e85a 73%,#111 88%);background-size:240% 100%;background-clip:text;-webkit-background-clip:text;animation:practice-title-current 8s ease-in-out infinite alternate}
+.practice .section-intro h2 em{color:inherit;background:none;animation:none}
+.task-list{position:relative;isolation:isolate;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-height:480px;border:0}
+.practice-glass-scene{position:absolute;inset:0;z-index:0;overflow:visible;pointer-events:none}
+.practice-glass-canvas{display:block;width:100%;height:100%;filter:drop-shadow(0 24px 24px rgba(31,27,48,.13)) saturate(1.08)}
+.task-row{position:relative;z-index:2;display:block;width:100%;min-width:0;min-height:480px;padding:0;border:0;background:transparent;overflow:visible;text-align:left;cursor:pointer;transition:transform .45s cubic-bezier(.16,.8,.2,1)}
+.task-row:before,.task-row:after{content:none!important}
+.task-row:hover{padding-left:0;background:transparent;transform:translateY(-5px)}
+.task-row>span,.task-row>strong,.task-row>small,.task-row>i,.task-row>em,.task-row .task-arrow{position:absolute;z-index:3}
+.task-row>span{left:14px;top:18px;font-size:9px;font-weight:800}
+.task-row .task-arrow{right:14px;top:14px;font-size:19px;transition:transform .35s ease,color .35s ease}
+.task-row>strong{left:14px;bottom:88px;font:400 clamp(27px,2.3vw,38px)/1 Georgia,"Times New Roman",serif}
+.task-row>small{left:14px;bottom:64px;font-size:8px;letter-spacing:0}
+.task-row>i{left:14px;right:14px;bottom:42px;width:auto;height:2px;background:rgba(17,17,15,.19)}
+.task-row>em{right:14px;bottom:17px;font-size:8px;letter-spacing:0}
+.task-row>span,.task-row>strong,.task-row>em,.task-row .task-arrow{transition:color .35s ease,background .4s ease,filter .35s ease,transform .35s ease}
+.task-row:hover>span,.task-row:focus-visible>span,.task-row:hover>strong,.task-row:focus-visible>strong,.task-row:hover>em,.task-row:focus-visible>em,.task-row:hover .task-arrow,.task-row:focus-visible .task-arrow{color:transparent;background:linear-gradient(95deg,#315cff,#705cff 34%,#ed5f9e 68%,#d9e85a);background-clip:text;-webkit-background-clip:text;filter:saturate(1.08)}
+.task-row:hover .task-arrow,.task-row:focus-visible .task-arrow{transform:rotate(45deg)}
+.task-row:hover>i b,.task-row:focus-visible>i b{background:linear-gradient(90deg,#315cff,#705cff,#ed5f9e,#d9e85a)}
+.task-row:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.practice-glass-scene[data-glass-fallback="true"]{background:radial-gradient(ellipse at 17% 42%,rgba(112,92,255,.2),transparent 19%),radial-gradient(ellipse at 50% 42%,rgba(237,95,158,.16),transparent 19%),radial-gradient(ellipse at 83% 42%,rgba(217,232,90,.16),transparent 19%)}
+.menu-button,.music-button{position:relative}
+.menu-button:after,.music-button:after{content:"";position:absolute;left:0;right:0;bottom:3px;height:2px;background:linear-gradient(90deg,#315cff,#705cff,#ed5f9e,#d9e85a);transform:scaleX(0);transform-origin:center;transition:transform .35s cubic-bezier(.16,.8,.2,1)}
+.menu-button:hover:after,.menu-button:focus-visible:after,.music-button:hover:after,.music-button:focus-visible:after{transform:scaleX(1)}
+.menu-overlay nav a{position:relative;isolation:isolate}
+.menu-overlay nav a:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:linear-gradient(90deg,#315cff,#705cff 34%,#ed5f9e 67%,#d9e85a);transform:scaleX(0);transform-origin:left;transition:transform .5s cubic-bezier(.16,.8,.2,1)}
+.menu-overlay nav a:hover:after,.menu-overlay nav a:focus-visible:after{transform:scaleX(1)}
+.task-options{display:grid;grid-template-columns:repeat(3,minmax(130px,190px));gap:14px}
+.task-options button{position:relative;min-height:96px;padding:18px 25px;border:1px solid rgba(17,17,15,.12);background:linear-gradient(145deg,rgba(255,255,255,.9),rgba(226,225,232,.48) 48%,rgba(255,255,255,.72));clip-path:polygon(10% 0,84% 4%,100% 42%,88% 100%,15% 92%,0 48%);filter:drop-shadow(0 10px 12px rgba(17,17,15,.08));transition:filter .35s ease,transform .35s cubic-bezier(.16,.8,.2,1),color .3s ease,background .35s ease}
+.task-options button:nth-child(2){clip-path:polygon(18% 0,90% 10%,100% 64%,78% 100%,5% 87%,0 31%)}
+.task-options button:nth-child(3){clip-path:polygon(9% 12%,70% 0,100% 43%,90% 91%,28% 100%,0 61%)}
+.task-options button:hover,.task-options button:focus-visible{background:linear-gradient(135deg,rgba(49,92,255,.26),rgba(112,92,255,.22) 35%,rgba(237,95,158,.25) 68%,rgba(217,232,90,.34));filter:drop-shadow(0 14px 14px rgba(48,37,92,.14));transform:translateY(-5px)}
+.task-options button.correct{background:linear-gradient(135deg,#315cff,#705cff 35%,#ed5f9e 67%,#d9e85a);color:white;filter:none}
+.task-options button.incorrect{background:#111;color:white;filter:none}
+.word-title h3{position:relative;isolation:isolate}
+.word-title h3:after{content:attr(data-word);position:absolute;inset:0;color:transparent;background:linear-gradient(100deg,transparent 0 18%,#315cff 34%,#705cff 48%,#ed5f9e 62%,#d9e85a 76%,transparent 92%);background-size:220% 100%;background-clip:text;-webkit-background-clip:text;mix-blend-mode:multiply;pointer-events:none;animation:study-word-refraction 1.35s cubic-bezier(.16,.8,.2,1) both}
+@keyframes practice-title-line{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes practice-title-current{from{background-position:0 0}to{background-position:100% 0}}
+@keyframes study-word-refraction{0%{opacity:0;background-position:120% 0;transform:translateX(-8px)}35%{opacity:.92}100%{opacity:0;background-position:-90% 0;transform:translateX(8px)}}
+@media(max-width:1100px){.practice{grid-template-columns:1fr;gap:52px}.task-list,.task-row{min-height:430px}}
+@media(max-width:720px){.task-list{grid-template-columns:1fr;gap:22px;min-height:974px}.task-row{width:min(100%,340px);min-height:310px;margin:0 auto}.task-row>strong{bottom:72px;font-size:31px}.task-row>small{bottom:51px}.task-row>i{bottom:32px}.task-row>em{bottom:10px}.task-options{grid-template-columns:1fr}.task-options button{width:min(100%,320px);min-height:86px}}
+@media(hover:none),(pointer:coarse){.task-row:hover{transform:none}.task-row:hover>span,.task-row:hover>strong,.task-row:hover>em,.task-row:hover .task-arrow{color:inherit;background:none;filter:none}.practice-glass-canvas{filter:drop-shadow(0 18px 20px rgba(31,27,48,.12)) saturate(1.02)}}
+@media(prefers-reduced-motion:reduce){.practice .section-intro h2,.word-title h3:after{animation:none}.task-row,.task-options button{transition:none}}
