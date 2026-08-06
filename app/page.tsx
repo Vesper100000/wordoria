@@ -3139,8 +3139,23 @@ function getExamPriorityWeight(word: string) {
   if (level === "CET-4") return 2.8;
   if (level === "CET-6") return 3.1;
   if (level === "Contest") return 2.35;
-  if (level === "Visual") return 0.55;
+  if (level === "Visual") return 0.7;
   return 0.8;
+}
+
+function isVisualPracticeWord(word: string) {
+  return (wordLevelGlossary[word] ?? getWordLevel(word)) === "Visual";
+}
+
+function getVisualPracticeQuota(track: Track) {
+  if (track.name === "Interpret") return 2;
+  return Math.random() < 0.8 ? 1 : 0;
+}
+
+function getVisualPracticeWeight(word: string, records: Record<string, WordRecord>) {
+  const record = records[word];
+  const memoryBoost = record ? Math.max(0, 60 - (record.strength ?? 0)) / 18 : 2.6;
+  return getWordWeight(word, records) + memoryBoost;
 }
 
 function pickDistractors(correct: string, count = 2) {
@@ -3184,6 +3199,7 @@ function uniqueQuestions(questions: Question[]) {
 
 function buildQueue(track: Track, records: Record<string, WordRecord>) {
   const trackNumber = Math.max(0, Number(track.index) - 1);
+  const targetCount = 5;
   const reviewWords = sampleWeighted(
     Object.entries(records).filter(([word, record]) => Boolean(wordMap[word]) && record.missed > 0 && record.missed >= record.correct - 1),
     2,
@@ -3191,16 +3207,27 @@ function buildQueue(track: Track, records: Record<string, WordRecord>) {
   ).map(([word]) => word);
 
   const chosen = new Set(reviewWords);
+  const visualQuota = Math.min(getVisualPracticeQuota(track), targetCount - reviewWords.length);
+  const reviewVisualCount = reviewWords.filter(isVisualPracticeWord).length;
+  const neededVisualCount = Math.max(0, visualQuota - reviewVisualCount);
+  const visualWords = sampleWeighted(
+    wordBank.filter((entry) => isVisualPracticeWord(entry.word) && !chosen.has(entry.word)),
+    neededVisualCount,
+    (entry) => getVisualPracticeWeight(entry.word, records),
+  ).map((entry) => entry.word);
+
+  visualWords.forEach((word) => chosen.add(word));
   const freshWords = sampleWeighted(
     wordBank.filter((entry, index) => index % learningTracks.length === trackNumber && !chosen.has(entry.word)),
-    5 - reviewWords.length,
+    targetCount - reviewWords.length - visualWords.length,
     (entry) => getWordWeight(entry.word, records) * getExamPriorityWeight(entry.word),
   ).map((entry) => entry.word);
 
   return uniqueQuestions(shuffleArray([
     ...reviewWords.map((word) => makeReviewQuestion(word)),
+    ...visualWords.map((word) => makeDefinitionQuestion(word)),
     ...freshWords.map((word) => makeDefinitionQuestion(word)),
-  ])).slice(0, 5);
+  ])).slice(0, targetCount);
 }
 
 function HeroLiquidField() {
