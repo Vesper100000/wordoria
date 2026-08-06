@@ -109,8 +109,19 @@ function addBubbleDeformation(material: THREE.MeshPhysicalMaterial): BubbleUnifo
         "vBubbleLocalPosition = transformed;",
       ].join("\n"),
     );
+    shader.fragmentShader = [
+      "varying vec3 vBubbleLocalPosition;",
+      shader.fragmentShader,
+    ].join("\n").replace(
+      "#include <opaque_fragment>",
+      [
+        "#include <opaque_fragment>",
+        "float bubbleCenterClearance = smoothstep(0.04, 0.13, length(vBubbleLocalPosition.xy));",
+        "gl_FragColor.a *= bubbleCenterClearance;",
+      ].join("\n"),
+    );
   };
-  material.customProgramCacheKey = () => "wordoria-bubble-v3";
+  material.customProgramCacheKey = () => "wordoria-bubble-v4";
   return deform;
 }
 
