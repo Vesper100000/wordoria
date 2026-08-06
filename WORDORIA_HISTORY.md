@@ -5,7 +5,7 @@
 ## 当前正确项目
 
 - 当前源码目录：`D:\codex\wordoria-sites-publish-20260716221014`
-- 线上网站：<https://wordoria-dream-quest.panxintian44.chatgpt.site>
+- 线上网站：<https://vesper100000.github.io/wordoria/>
 - Sites 项目 ID：`appgprj_6a50d7464e9081918b4bc6bf0d03e230`
 - 当前线上最新版：version 4
 - version 4 源码 commit：`5ee3a3e4551b7d634b867d5e76ed73896ab5bc64`
@@ -134,7 +134,7 @@
 - 成功发布结果：
   - version 4
   - commit：`5ee3a3e4551b7d634b867d5e76ed73896ab5bc64`
-  - 线上地址：<https://wordoria-dream-quest.panxintian44.chatgpt.site>
+  - 线上地址：<https://vesper100000.github.io/wordoria/>
 
 ### 7. 当前整理/恢复任务
 

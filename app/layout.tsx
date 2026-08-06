@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 
 const gitHubPagesBasePath = process.env.GITHUB_PAGES === "true" ? process.env.GITHUB_PAGES_BASE_PATH ?? "" : "";
@@ -11,13 +11,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Wordoria - Words, seen differently.",
     description: "A visual lexicon for ambitious English learners.",
-    images: ["https://wordoria-dream-quest.panxintian44.chatgpt.site/og.png"],
+    images: ["https://vesper100000.github.io/wordoria/og.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "Wordoria - Words, seen differently.",
     description: "A visual lexicon for ambitious English learners.",
-    images: ["https://wordoria-dream-quest.panxintian44.chatgpt.site/og.png"],
+    images: ["https://vesper100000.github.io/wordoria/og.png"],
   },
 };
 
