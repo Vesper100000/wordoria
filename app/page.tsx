@@ -2539,6 +2539,7 @@ const standardIpaGlossary: Record<string, string> = Object.fromEntries([
   ["tactile", "/ˈtæktaɪl/"],
   ["lucid", "/ˈluːsɪd/"],
   ["subtle", "/ˈsʌtəl/"],
+  ["substitute", "/ˈsʌbstɪtjuːt/"],
   ["evoke", "/ɪˈvəʊk/"],
   ["iridescent", "/ˌɪrɪˈdesənt/"],
   ["serene", "/səˈriːn/"],
