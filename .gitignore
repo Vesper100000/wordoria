@@ -40,6 +40,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/.lexicon-cache.json
 /_backup_before_version4_sync_*/
 /.agents/
 /.codex/

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import PracticeGlassScene from "./PracticeGlassScene";
+import { verifiedExamLexicon } from "./verified-exam-lexicon";
 
 type WordEntry = {
   word: string;
@@ -1808,12 +1809,13 @@ zeal|Contest|热情；热忱
 
 const examWordBank: WordEntry[] = examWordLines.map((line) => {
   const [word, level, cn] = line.split("|") as [string, WordLevel, string];
+  const verified = verifiedExamLexicon[word as keyof typeof verifiedExamLexicon];
   return {
     word,
     level,
-    part: level === "Contest" ? "advanced word" : "core word",
-    definition: cn,
-    cn,
+    part: verified?.part ?? (level === "Contest" ? "advanced word" : "core word"),
+    definition: verified?.definition ?? cn,
+    cn: verified?.cn ?? cn,
     example: `${word} is part of the ${level} exam practice path.`,
   };
 });
@@ -2416,99 +2418,6 @@ const levelSummary = wordBank.reduce<Record<WordLevel, number>>((summary, entry)
   return summary;
 }, { "CET-4": 0, "CET-6": 0, Contest: 0, Visual: 0, Advanced: 0 });
 
-function makeQuickIpa(word: string) {
-  const lower = word.toLowerCase();
-  const suffixRules: Array<[RegExp, string]> = [
-    [/tion$/u, "ʃən"],
-    [/sion$/u, "ʒən"],
-    [/cian$/u, "ʃən"],
-    [/ture$/u, "tʃə"],
-    [/sure$/u, "ʒə"],
-    [/ous$/u, "əs"],
-    [/ious$/u, "iəs"],
-    [/ive$/u, "ɪv"],
-    [/ity$/u, "ɪti"],
-    [/ment$/u, "mənt"],
-    [/ness$/u, "nəs"],
-    [/able$/u, "əbəl"],
-    [/ible$/u, "ɪbəl"],
-    [/ally$/u, "əli"],
-    [/ical$/u, "ɪkəl"],
-    [/al$/u, "əl"],
-    [/ary$/u, "əri"],
-    [/ory$/u, "əri"],
-    [/ence$/u, "əns"],
-    [/ance$/u, "əns"],
-    [/ent$/u, "ənt"],
-    [/ant$/u, "ənt"],
-    [/ate$/u, "eɪt"],
-    [/ize$/u, "aɪz"],
-    [/ise$/u, "aɪz"],
-    [/ify$/u, "ɪfaɪ"],
-    [/ly$/u, "li"],
-    [/ed$/u, "d"],
-    [/ing$/u, "ɪŋ"],
-    [/er$/u, "ə"],
-  ];
-
-  let body = lower;
-  let suffix = "";
-  for (const [pattern, ipa] of suffixRules) {
-    if (pattern.test(body)) {
-      body = body.replace(pattern, "");
-      suffix = ipa;
-      break;
-    }
-  }
-
-  let guide = body
-    .replace(/eau/gu, "əʊ")
-    .replace(/augh|ough/gu, "ɔː")
-    .replace(/tion/gu, "ʃən")
-    .replace(/sion/gu, "ʒən")
-    .replace(/cial/gu, "ʃəl")
-    .replace(/tial/gu, "ʃəl")
-    .replace(/ph/gu, "f")
-    .replace(/ch/gu, "tʃ")
-    .replace(/sh/gu, "ʃ")
-    .replace(/th/gu, "θ")
-    .replace(/qu/gu, "kw")
-    .replace(/x/gu, "ks")
-    .replace(/ck/gu, "k")
-    .replace(/dge/gu, "dʒ")
-    .replace(/ge(?=[aeiou])/gu, "dʒ")
-    .replace(/g(?=e|i|y)/gu, "dʒ")
-    .replace(/c(?=e|i|y)/gu, "s")
-    .replace(/c/gu, "k")
-    .replace(/oo/gu, "uː")
-    .replace(/ee/gu, "iː")
-    .replace(/ea/gu, "iː")
-    .replace(/ai|ay/gu, "eɪ")
-    .replace(/oa|ow/gu, "əʊ")
-    .replace(/ou/gu, "aʊ")
-    .replace(/oi|oy/gu, "ɔɪ")
-    .replace(/igh/gu, "aɪ")
-    .replace(/air/gu, "eə")
-    .replace(/ear/gu, "ɪə")
-    .replace(/er$/u, "ə")
-    .replace(/ar/gu, "ɑː")
-    .replace(/or/gu, "ɔː")
-    .replace(/ur|ir/gu, "ɜː")
-    .replace(/a/gu, "æ")
-    .replace(/e/gu, "e")
-    .replace(/i/gu, "ɪ")
-    .replace(/o/gu, "ɒ")
-    .replace(/u/gu, "ʌ")
-    .replace(/y/gu, "i");
-
-  guide = (guide + suffix)
-    .replace(/([æeɪɒʌiɑɔəɜ][ː]?)(?=[bcdfghjklmnpqrstvwxzθʃʒ]{1,2}[æeɪɒʌiɑɔəɜ])/u, "ˈ$1")
-    .replace(/ˈ+/gu, "ˈ")
-    .replace(/^ˈ|ˈ$/gu, "");
-
-  return `/${guide}/`;
-}
-
 const standardIpaGlossary: Record<string, string> = Object.fromEntries([
   ["austere", "/ɔːˈstɪə/"],
   ["ornate", "/ɔːˈneɪt/"],
@@ -3012,8 +2921,11 @@ const standardIpaGlossary: Record<string, string> = Object.fromEntries([
   ["discernment", "/dɪˈsɜːnmənt/"],
   ["stamina", "/ˈstæmɪnə/"],
 ]);
+const verifiedExamIpaGlossary: Record<string, string> = Object.fromEntries(
+  Object.entries(verifiedExamLexicon).map(([word, entry]) => [word, entry.ipa]),
+);
 const phoneticGlossary: Record<string, string> = Object.fromEntries(
-  wordBank.map((entry) => [entry.word, standardIpaGlossary[entry.word] ?? coreIpaGlossary[entry.word] ?? makeQuickIpa(entry.word)]),
+  wordBank.map((entry) => [entry.word, standardIpaGlossary[entry.word] ?? verifiedExamIpaGlossary[entry.word] ?? coreIpaGlossary[entry.word] ?? ""]),
 );
 
 const learningTracks = [
