@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import PracticeGlassScene from "./PracticeGlassScene";
 import { verifiedExamLexicon } from "./verified-exam-lexicon";
+import { wordExamples } from "./word-examples";
 
 type WordEntry = {
   word: string;
@@ -12,6 +13,7 @@ type WordEntry = {
   phonetic?: string;
   level?: WordLevel;
   example: string;
+  exampleCn?: string;
 };
 
 type WordLevel = "CET-4" | "CET-6" | "Contest" | "Visual" | "Advanced";
@@ -52,6 +54,17 @@ type MemoryAnimation = {
   fromSaturation: number;
   toSaturation: number;
   id: number;
+};
+
+type MemoryDemoStage = {
+  day: string;
+  event: string;
+  note: string;
+  tier: MemoryTier["label"];
+  level: MemoryTier["level"];
+  strength: number;
+  saturation: number;
+  hold: number;
 };
 
 type SavedStudyState = {
@@ -890,7 +903,8 @@ const expandedWordBank: WordEntry[] = expandedWordData.map(([word, part, definit
   part,
   definition,
   cn,
-  example: `The visual study uses ${word} as a cue for seeing and remembering.`,
+  example: wordExamples[word].example,
+  exampleCn: wordExamples[word].exampleCn,
 }));
 
 const advancedWordData = [
@@ -1101,7 +1115,8 @@ const advancedWordBank: WordEntry[] = advancedWordData.map(([word, part, definit
   part,
   definition,
   cn,
-  example: `The learning page uses ${word} to connect language, image, and memory.`,
+  example: wordExamples[word].example,
+  exampleCn: wordExamples[word].exampleCn,
 }));
 
 const examWordLines = `
@@ -1816,7 +1831,8 @@ const examWordBank: WordEntry[] = examWordLines.map((line) => {
     part: verified?.part ?? (level === "Contest" ? "advanced word" : "core word"),
     definition: verified?.definition ?? cn,
     cn: verified?.cn ?? cn,
-    example: `${word} is part of the ${level} exam practice path.`,
+    example: wordExamples[word].example,
+    exampleCn: wordExamples[word].exampleCn,
   };
 });
 
@@ -1838,7 +1854,12 @@ function mergeWordEntries(entries: WordEntry[]) {
   return Array.from(merged.values());
 }
 
-const wordBank: WordEntry[] = mergeWordEntries([...baseWordBank, ...expandedWordBank, ...advancedWordBank, ...examWordBank]);
+const wordBank: WordEntry[] = mergeWordEntries([
+  ...baseWordBank,
+  ...expandedWordBank,
+  ...advancedWordBank,
+  ...examWordBank,
+]).map((entry) => ({ ...entry, ...wordExamples[entry.word] }));
 
 const coreChineseGlossary: Record<string, string> = {};
 
@@ -2928,6 +2949,53 @@ const phoneticGlossary: Record<string, string> = Object.fromEntries(
   wordBank.map((entry) => [entry.word, standardIpaGlossary[entry.word] ?? verifiedExamIpaGlossary[entry.word] ?? coreIpaGlossary[entry.word] ?? ""]),
 );
 
+function getExampleChinese(entry: WordEntry) {
+  return entry.exampleCn?.trim() || null;
+}
+
+function LearningCard({
+  word,
+  label = "WORD IN CONTEXT",
+  tone = "neutral",
+  compact = false,
+  onClose,
+}: {
+  word: string;
+  label?: string;
+  tone?: "neutral" | "choice" | "correct";
+  compact?: boolean;
+  onClose?: () => void;
+}) {
+  const entry = wordMap[word];
+  if (!entry) return null;
+  const exampleChinese = getExampleChinese(entry);
+
+  return (
+    <article className={`learning-card tone-${tone}${compact ? " is-compact" : ""}`} aria-label={`${word} learning card`}>
+      <header className="learning-card-head">
+        <div>
+          <small>{label}</small>
+          <h4>{entry.word}</h4>
+        </div>
+        <div className="learning-card-meta">
+          <em>{phoneticGlossary[word]}</em>
+          <span>{entry.part}</span>
+          <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
+          {onClose && <button className="learning-card-close" onClick={onClose} aria-label="Close word card">x</button>}
+        </div>
+      </header>
+      <div className="learning-card-meaning">
+        <p>{entry.definition}</p>
+        <p lang="zh-CN">{chineseGlossary[word]}</p>
+      </div>
+      <blockquote className="learning-card-example">
+        <p lang="en">{entry.example}</p>
+        {exampleChinese && <p className="learning-card-example-cn" lang="zh-CN">{exampleChinese}</p>}
+      </blockquote>
+    </article>
+  );
+}
+
 const learningTracks = [
   {
     index: "01",
@@ -2991,6 +3059,15 @@ const MEMORY_TIERS: MemoryTier[] = [
   { label: "TRACE", level: 2, min: 20, max: 44, saturation: 0.25, graceDays: 2, decayPerDay: 4 },
   { label: "FAMILIAR", level: 3, min: 45, max: 74, saturation: 0.6, graceDays: 7, decayPerDay: 2.5 },
   { label: "ROOTED", level: 4, min: 75, max: 100, saturation: 1, graceDays: 14, decayPerDay: 1.5 },
+];
+
+const MEMORY_DEMO_STAGES: MemoryDemoStage[] = [
+  { day: "\u7b2c 1 \u5929", event: "\u7b2c\u4e00\u6b21\u9047\u89c1", note: "\u8bb0\u5fc6\u5c1a\u672a\u5f62\u6210", tier: "DORMANT", level: 1, strength: 0, saturation: 0, hold: 6000 },
+  { day: "\u7b2c 1 \u5929", event: "\u7b2c\u4e00\u6b21\u7b54\u5bf9", note: "\u989c\u8272\u5f00\u59cb\u56de\u6765", tier: "TRACE", level: 2, strength: 25, saturation: 0.25, hold: 1150 },
+  { day: "\u7b2c 4 \u5929", event: "\u518d\u6b21\u590d\u4e60", note: "\u8bb0\u5fc6\u9010\u6e10\u719f\u6089", tier: "FAMILIAR", level: 3, strength: 60, saturation: 0.6, hold: 1250 },
+  { day: "\u7b2c 12 \u5929", event: "\u7a33\u5b9a\u8bb0\u4f4f", note: "\u8bb0\u5fc6\u6062\u590d\u5b8c\u6574\u8272\u5f69", tier: "ROOTED", level: 4, strength: 100, saturation: 1, hold: 1550 },
+  { day: "\u7b2c 47 \u5929", event: "35 \u5929\u672a\u590d\u4e60", note: "\u989c\u8272\u968f\u8bb0\u5fc6\u6162\u6162\u892a\u53bb", tier: "FAMILIAR", level: 3, strength: 60, saturation: 0.6, hold: 1750 },
+  { day: "\u7b2c 48 \u5929", event: "\u518d\u6b21\u7b54\u9519", note: "\u8fd9\u4e2a\u5355\u8bcd\u91cd\u65b0\u8fdb\u5165\u590d\u4e60", tier: "TRACE", level: 2, strength: 25, saturation: 0.25, hold: 1450 },
 ];
 
 function clampMemory(value: number) {
@@ -3366,6 +3443,7 @@ export default function Home() {
   const [studyAnswer, setStudyAnswer] = useState<string | null>(null);
   const [journalPage, setJournalPage] = useState(0);
   const [taskAnswer, setTaskAnswer] = useState<string | null>(null);
+  const [inspectedOption, setInspectedOption] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState<number | null>(null);
   const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null);
@@ -3379,8 +3457,15 @@ export default function Home() {
   const [musicUnavailable, setMusicUnavailable] = useState(false);
   const [memoryNow, setMemoryNow] = useState(0);
   const [memoryAnimation, setMemoryAnimation] = useState<MemoryAnimation | null>(null);
+  const [memoryDemoOpen, setMemoryDemoOpen] = useState(false);
+  const [memoryDemoStep, setMemoryDemoStep] = useState(0);
+  const [memoryDemoPlaying, setMemoryDemoPlaying] = useState(false);
+  const [videoTourRunning, setVideoTourRunning] = useState(false);
+  const [videoTourCountdown, setVideoTourCountdown] = useState(0);
+  const [videoTourPhase, setVideoTourPhase] = useState("idle");
   const pendingMemoryAnimationRef = useRef<MemoryAnimation | null>(null);
   const trackBurstTimerRef = useRef<number | null>(null);
+  const videoTourRunRef = useRef(0);
 
   const activeTrack = activeTrackIndex === null ? null : learningTracks[activeTrackIndex];
   const activeQuestion = taskQueue[taskStep] ?? null;
@@ -3398,6 +3483,8 @@ export default function Home() {
   const savedEntries = useMemo(() => saved.filter((word) => wordMap[word]), [saved]);
   const activeJournal = photographCollections[journalPage] ?? photographCollections[0];
   const journalIssue = String(journalPage + 1).padStart(2, "0");
+  const memoryDemoPhoto = photographCollections[0][0];
+  const memoryDemoStage = MEMORY_DEMO_STAGES[memoryDemoStep];
 
   const nextTrack = useMemo(() => {
     if (activeTrackIndex === null) return null;
@@ -3417,6 +3504,7 @@ export default function Home() {
     setArchiveOpen(false);
     setStudyAnswer(null);
     setTaskAnswer(null);
+    setInspectedOption(null);
     setTaskStep(0);
     setTaskQueue([]);
     setSessionWords([]);
@@ -3459,6 +3547,29 @@ export default function Home() {
     const timeout = window.setTimeout(() => setMemoryAnimation(null), 1500);
     return () => window.clearTimeout(timeout);
   }, [memoryAnimation]);
+
+  useEffect(() => {
+    if (!memoryDemoOpen || !memoryDemoPlaying) return;
+    const timeout = window.setTimeout(() => {
+      if (memoryDemoStep >= MEMORY_DEMO_STAGES.length - 1) {
+        setMemoryDemoPlaying(false);
+        return;
+      }
+      setMemoryDemoStep((current) => current + 1);
+    }, memoryDemoStage.hold);
+    return () => window.clearTimeout(timeout);
+  }, [memoryDemoOpen, memoryDemoPlaying, memoryDemoStage.hold, memoryDemoStep]);
+
+  useEffect(() => {
+    if (!memoryDemoOpen) return;
+    const closeDemo = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMemoryDemoPlaying(false);
+      setMemoryDemoOpen(false);
+    };
+    window.addEventListener("keydown", closeDemo);
+    return () => window.removeEventListener("keydown", closeDemo);
+  }, [memoryDemoOpen]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -3629,8 +3740,123 @@ export default function Home() {
     setTaskQueue(queue);
     setTaskStep(0);
     setTaskAnswer(null);
+    setInspectedOption(null);
     setSessionWords([]);
   };
+
+  const startVideoTour = async () => {
+    const runId = videoTourRunRef.current + 1;
+    videoTourRunRef.current = runId;
+    const pause = (duration: number) => new Promise<void>((resolve) => window.setTimeout(resolve, duration));
+    const isCurrentRun = () => videoTourRunRef.current === runId;
+
+    setVideoTourRunning(true);
+    setVideoTourPhase("countdown");
+    setMemoryDemoPlaying(false);
+    setMemoryDemoOpen(false);
+    setMenuOpen(false);
+    setArchiveOpen(false);
+    setSelected(null);
+    setActiveTrackIndex(null);
+    window.scrollTo({ top: 0, behavior: "auto" });
+
+    for (let count = 3; count >= 1; count -= 1) {
+      setVideoTourCountdown(count);
+      await pause(1000);
+      if (!isCurrentRun()) return;
+    }
+    setVideoTourCountdown(0);
+
+    setVideoTourPhase("memory");
+    setMemoryDemoStep(0);
+    setMemoryDemoOpen(true);
+    setMemoryDemoPlaying(true);
+    await pause(13600);
+    if (!isCurrentRun()) return;
+
+    setMemoryDemoPlaying(false);
+    setMemoryDemoOpen(false);
+    setVideoTourPhase("hero");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    await pause(4000);
+    if (!isCurrentRun()) return;
+
+    setVideoTourPhase("practice");
+    document.getElementById("practice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    await pause(1300);
+    if (!isCurrentRun()) return;
+    for (let index = 0; index < learningTracks.length; index += 1) {
+      setHoveredTrackIndex(index);
+      await pause(1300);
+      if (!isCurrentRun()) return;
+    }
+
+    setHoveredTrackIndex(0);
+    setBurstingTrackIndex(0);
+    await pause(480);
+    if (!isCurrentRun()) return;
+    setBurstingTrackIndex(null);
+    setHoveredTrackIndex(null);
+
+    const tourTrack = learningTracks[0];
+    const tourQueue = buildQueue(tourTrack, records);
+    setVideoTourPhase("question");
+    setActiveTrackIndex(0);
+    setTaskQueue(tourQueue);
+    setTaskStep(0);
+    setTaskAnswer(null);
+    setInspectedOption(null);
+    setSessionWords([]);
+    await pause(1800);
+    if (!isCurrentRun()) return;
+    setTaskAnswer(tourQueue[0]?.correct ?? null);
+    await pause(2600);
+    if (!isCurrentRun()) return;
+    setActiveTrackIndex(null);
+    setTaskQueue([]);
+    setTaskAnswer(null);
+    setInspectedOption(null);
+
+    setVideoTourPhase("journal");
+    document.getElementById("journal")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    await pause(6000);
+    if (!isCurrentRun()) return;
+
+    setVideoTourPhase("lexicon");
+    document.getElementById("archive")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    await pause(4000);
+    if (!isCurrentRun()) return;
+
+    setVideoTourPhase("ending");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    await pause(4000);
+    if (!isCurrentRun()) return;
+
+    setVideoTourRunning(false);
+    setVideoTourPhase("idle");
+  };
+
+  useEffect(() => {
+    if (!videoTourRunning) return;
+    const cancelTour = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      videoTourRunRef.current += 1;
+      setVideoTourRunning(false);
+      setVideoTourCountdown(0);
+      setVideoTourPhase("idle");
+      setMemoryDemoPlaying(false);
+      setMemoryDemoOpen(false);
+      setHoveredTrackIndex(null);
+      setBurstingTrackIndex(null);
+      setActiveTrackIndex(null);
+      setTaskQueue([]);
+      setTaskStep(0);
+      setTaskAnswer(null);
+      setInspectedOption(null);
+    };
+    window.addEventListener("keydown", cancelTour);
+    return () => window.removeEventListener("keydown", cancelTour);
+  }, [videoTourRunning]);
 
   const enterTrackWithBurst = (track: Track, index: number) => {
     if (burstingTrackIndex !== null) return;
@@ -3646,7 +3872,11 @@ export default function Home() {
   };
 
   const answerTask = (option: string) => {
-    if (!activeQuestion || taskAnswer) return;
+    if (!activeQuestion) return;
+    if (taskAnswer) {
+      setInspectedOption((current) => current === option ? null : option);
+      return;
+    }
     const isCorrect = option === activeQuestion.correct;
     setTaskAnswer(option);
     updateRecord(activeQuestion.correct, isCorrect);
@@ -3658,6 +3888,7 @@ export default function Home() {
   const goToNextQuestion = () => {
     if (!activeTrack) return;
     setTaskAnswer(null);
+    setInspectedOption(null);
     if (taskStep === taskQueue.length - 1) {
       setCompletedTracks((current) => current.includes(activeTrack.name) ? current : [...current, activeTrack.name]);
     }
@@ -3671,6 +3902,7 @@ export default function Home() {
     setTaskQueue(buildQueue(learningTracks[nextIndex], records));
     setTaskStep(0);
     setTaskAnswer(null);
+    setInspectedOption(null);
     setSessionWords([]);
   };
 
@@ -3722,7 +3954,7 @@ export default function Home() {
   };
 
   return (
-    <main>
+    <main className={videoTourRunning ? `video-tour phase-${videoTourPhase}` : undefined}>
       <audio
         ref={musicRef}
         loop
@@ -3757,7 +3989,18 @@ export default function Home() {
       <section className="hero" id="top" onPointerMove={moveHeroLight}>
         <div className="hero-stage">
           <HeroLiquidField />
-          <a className="hero-cta" href="#practice">BEGIN STUDY <span>-&gt;</span></a>
+          <a
+            className="hero-cta"
+            href="#practice"
+            aria-label={`${recordedWords.length ? "Continue" : "Begin"} a five-word study session`}
+          >
+            <span className="hero-cta-index">01</span>
+            <span className="hero-cta-copy">
+              <strong>{recordedWords.length ? "CONTINUE STUDY" : "BEGIN STUDY"}</strong>
+              <small>5 WORDS / ABOUT 2 MIN</small>
+            </span>
+            <span className="hero-cta-arrow" aria-hidden="true">-&gt;</span>
+          </a>
           <div className="mega-word" aria-label="Wordoria" data-text="WORDORIA" onPointerMove={moveWordLight}>
             {"WORDORIA".split("").map((letter, index) => (
               <span className="mega-letter" data-letter={letter} style={{ "--i": index, "--phase": `${index * 13}%` } as CSSProperties} key={`${letter}-${index}`}>
@@ -3769,6 +4012,23 @@ export default function Home() {
             <strong>VISUAL LEXICON STUDIO</strong>
             <span>LEXICON / JOURNAL&nbsp;&nbsp;&nbsp;&nbsp; EN</span>
           </div>
+          <nav className="hero-route" aria-label="Explore Wordoria">
+            <a href="#practice">
+              <span>01</span>
+              <strong>Practice</strong>
+              <small>Build recall</small>
+            </a>
+            <a href="#journal">
+              <span>02</span>
+              <strong>Visual journal</strong>
+              <small>See memory</small>
+            </a>
+            <a href="#archive">
+              <span>03</span>
+              <strong>Lexicon</strong>
+              <small>Review words</small>
+            </a>
+          </nav>
         </div>
       </section>
 
@@ -3912,6 +4172,109 @@ export default function Home() {
         </small>
       </footer>
 
+      {process.env.NODE_ENV === "development" && !memoryDemoOpen && !videoTourRunning && (
+        <div className="local-demo-tools">
+          <button className="video-tour-launcher" onClick={startVideoTour}>
+            VIDEO TOUR
+          </button>
+          <button
+            className="memory-demo-launcher"
+            onClick={() => {
+              setMemoryDemoStep(0);
+              setMemoryDemoPlaying(false);
+              setMemoryDemoOpen(true);
+            }}
+          >
+            MEMORY DEMO
+          </button>
+        </div>
+      )}
+
+      {process.env.NODE_ENV === "development" && videoTourRunning && videoTourCountdown > 0 && (
+        <div className="video-tour-countdown" aria-live="assertive">
+          <span>RECORDING STARTS IN</span>
+          <strong>{videoTourCountdown}</strong>
+          <small>ESC TO CANCEL</small>
+        </div>
+      )}
+
+      {process.env.NODE_ENV === "development" && memoryDemoOpen && (
+        <div
+          className={`memory-demo-overlay${memoryDemoPlaying ? " is-playing" : ""}${videoTourRunning ? " is-tour" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Local memory color time-lapse demo"
+        >
+          <div className="memory-demo-image" aria-hidden="true">
+            <img
+              src={memoryDemoPhoto.image}
+              alt=""
+              style={{
+                "--demo-gray": (1 - memoryDemoStage.saturation).toFixed(2),
+                "--demo-saturation": (0.55 + memoryDemoStage.saturation * 0.63).toFixed(2),
+                "--demo-brightness": (0.88 + memoryDemoStage.saturation * 0.14).toFixed(2),
+              } as CSSProperties}
+            />
+          </div>
+          <div className="memory-demo-shade" aria-hidden="true" />
+          <header className="memory-demo-header">
+            <span>WORDORIA / MEMORY COLOR</span>
+            <span>{"\u65f6\u95f4\u52a0\u901f\u6f14\u793a"}</span>
+          </header>
+          <section className="memory-demo-copy" aria-live="polite">
+            <p>{memoryDemoStage.day} / {memoryDemoStage.event}</p>
+            <h2>{memoryDemoPhoto.word}</h2>
+            <span>{memoryDemoStage.note}</span>
+          </section>
+          <div className="memory-demo-reading">
+            <span>MEMORY {String(memoryDemoStage.level).padStart(2, "0")}</span>
+            <strong>{memoryDemoStage.tier}</strong>
+            <b>{memoryDemoStage.strength}%</b>
+          </div>
+          <ol className="memory-demo-timeline" aria-label="Demo timeline">
+            {MEMORY_DEMO_STAGES.map((stage, index) => (
+              <li className={index <= memoryDemoStep ? "is-active" : ""} key={`${stage.day}-${stage.event}`}>
+                <i aria-hidden="true" />
+                <span>{stage.day}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="memory-demo-controls">
+            <button
+              onClick={() => setMemoryDemoStep((current) => Math.max(0, current - 1))}
+              disabled={memoryDemoStep === 0 || memoryDemoPlaying}
+            >
+              &lt; PREV
+            </button>
+            <button
+              className="memory-demo-play"
+              onClick={() => {
+                setMemoryDemoStep(0);
+                setMemoryDemoPlaying(true);
+              }}
+              disabled={memoryDemoPlaying}
+            >
+              {memoryDemoPlaying ? "PLAYING" : "AUTO PLAY"}
+            </button>
+            <button
+              onClick={() => setMemoryDemoStep((current) => Math.min(MEMORY_DEMO_STAGES.length - 1, current + 1))}
+              disabled={memoryDemoStep === MEMORY_DEMO_STAGES.length - 1 || memoryDemoPlaying}
+            >
+              NEXT &gt;
+            </button>
+          </div>
+          <button
+            className="memory-demo-close"
+            onClick={() => {
+              setMemoryDemoPlaying(false);
+              setMemoryDemoOpen(false);
+            }}
+          >
+            CLOSE x
+          </button>
+        </div>
+      )}
+
       {menuOpen && (
         <div className="menu-overlay" role="dialog" aria-modal="true" aria-label="Main menu">
           <button className="modal-close" onClick={closeAll}>CLOSE x</button>
@@ -3925,7 +4288,7 @@ export default function Home() {
       )}
 
       {activeTrack && (
-        <div className="task-overlay" role="dialog" aria-modal="true" aria-label={`${activeTrack.name} exercise`}>
+        <div className={`task-overlay${taskAnswer ? " has-answer" : ""}`} role="dialog" aria-modal="true" aria-label={`${activeTrack.name} exercise`}>
           <button className="modal-close" onClick={closeAll}>CLOSE x</button>
           <p className="overline">DAILY PRACTICE / {activeTrack.index}</p>
           <h3>{activeTrack.name}</h3>
@@ -3949,30 +4312,54 @@ export default function Home() {
             <>
               <p className="task-count">Question {taskStep + 1} / {taskQueue.length}</p>
               <p className="task-prompt">{activeQuestion.prompt}</p>
-              <div className="task-options">
-                {activeQuestion.options.map((option) => (
-                  <button
-                    key={option}
-                    className={taskAnswer === option ? (option === activeQuestion.correct ? "correct" : "incorrect") : ""}
-                    onClick={() => answerTask(option)}
-                  >
-                    {option}
-                  </button>
-                ))}
+              <div className="task-option-area">
+                {taskAnswer && inspectedOption && (
+                  <div className="option-inspector">
+                    <LearningCard
+                      word={inspectedOption}
+                      label="OPTION PREVIEW"
+                      compact
+                      onClose={() => setInspectedOption(null)}
+                    />
+                  </div>
+                )}
+                <div className={`task-options${taskAnswer ? " is-reviewing" : ""}`}>
+                  {activeQuestion.options.map((option) => (
+                    <button
+                      key={option}
+                      className={[
+                        taskAnswer === option ? (option === activeQuestion.correct ? "correct" : "incorrect") : "",
+                        inspectedOption === option ? "is-inspected" : "",
+                      ].filter(Boolean).join(" ")}
+                      onClick={() => answerTask(option)}
+                      aria-pressed={taskAnswer ? inspectedOption === option : undefined}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
               </div>
               {taskAnswer && (
                 <div className="task-feedback">
                   {taskAnswer === activeQuestion.correct ? (
-                    <p><strong>Precisely.</strong> <em>{activeQuestion.correct}</em> <span className="meaning-phonetic">{correctMeaningPhonetic}</span> <span className={getLevelClassName(activeQuestion.correct)}>{correctMeaningLevel}</span> means "{correctMeaning}." <span className="meaning-cn">CN: {correctMeaningCn}</span> +{activeTrack.reward} XP</p>
+                    <div className="task-result is-correct">
+                      <strong>PRECISELY</strong>
+                      <span>You chose {activeQuestion.correct}. Memory strengthened. +{activeTrack.reward} XP</span>
+                      <span lang="zh-CN">回答正确，记忆色彩已经加深。</span>
+                    </div>
                   ) : (
-                    <p>
-                      <strong>Not quite.</strong> You chose <em>{taskAnswer}</em> <span className="meaning-phonetic">{selectedMeaningPhonetic}</span> <span className={getLevelClassName(taskAnswer)}>{selectedMeaningLevel}</span>, which means "{selectedMeaning}". <span className="meaning-cn">CN: {selectedMeaningCn}</span>
-                      <br />
-                      The correct answer is <em>{activeQuestion.correct}</em> <span className="meaning-phonetic">{correctMeaningPhonetic}</span> <span className={getLevelClassName(activeQuestion.correct)}>{correctMeaningLevel}</span>: "{correctMeaning}". <span className="meaning-cn">CN: {correctMeaningCn}</span>
-                      <br />
-                      It has been added to review and will return.
-                    </p>
+                    <div className="task-result is-incorrect">
+                      <strong>NOT QUITE</strong>
+                      <span>You chose {taskAnswer}. The correct answer is {activeQuestion.correct}.</span>
+                      <span lang="zh-CN">你选择了 {taskAnswer}，正确答案是 {activeQuestion.correct}。</span>
+                    </div>
                   )}
+                  <div className={`answer-cards${taskAnswer === activeQuestion.correct ? " is-single" : ""}`}>
+                    {taskAnswer !== activeQuestion.correct && (
+                      <LearningCard word={taskAnswer} label="YOUR CHOICE / 你的选择" tone="choice" compact />
+                    )}
+                    <LearningCard word={activeQuestion.correct} label="CORRECT ANSWER / 正确答案" tone="correct" />
+                  </div>
                   <button onClick={goToNextQuestion}>{taskStep === taskQueue.length - 1 ? "Complete ring" : "Next word"}</button>
                 </div>
               )}
@@ -4022,7 +4409,10 @@ export default function Home() {
             <span className={getLevelClassName(selected.word)}>{wordLevelGlossary[selected.word]}</span>
             <p className="cn-definition">{chineseGlossary[selected.word]}</p>
             {selected.definition !== chineseGlossary[selected.word] && <p className="definition">{selected.definition}</p>}
-            <blockquote>{selected.sentence}</blockquote>
+            <blockquote className="study-example">
+              <p>{selected.sentence}</p>
+              {getExampleChinese(wordMap[selected.word]) && <p className="study-example-cn" lang="zh-CN">{getExampleChinese(wordMap[selected.word])}</p>}
+            </blockquote>
             <div className="challenge">
               <small>CONTEXT CHECK</small>
               <p>Which word best matches this visual study?</p>

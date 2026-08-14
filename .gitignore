@@ -41,6 +41,17 @@ next-env.d.ts
 /outputs/
 /work/
 /.lexicon-cache.json
+/.lexicon-work/
 /_backup_before_version4_sync_*/
 /.agents/
 /.codex/
+/.codex-devserver*.log
+/tsconfig.tsbuildinfo
+/scripts/*examples*
+/scripts/extract-lexicon-metadata.mjs
+/scripts/fetch-dictionary-examples.py
+/scripts/integrate-word-examples.mjs
+/scripts/extend-lexicon-validator.mjs
+/scripts/apply-quality-overrides.py
+/scripts/generate-example-completions.py
+/scripts/score-example-candidates.py
