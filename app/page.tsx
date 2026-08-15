@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import PracticeGlassScene from "./PracticeGlassScene";
+import { getMemoryTierLabel, getTrackCopy, translate, type Locale, type UiKey } from "./i18n";
 import { verifiedExamLexicon } from "./verified-exam-lexicon";
 import { wordExamples } from "./word-examples";
 
@@ -20,6 +21,7 @@ type WordLevel = "CET-4" | "CET-6" | "Contest" | "Visual" | "Advanced";
 
 type Question = {
   prompt: string;
+  promptCn?: string;
   options: string[];
   correct: string;
 };
@@ -68,6 +70,7 @@ type MemoryDemoStage = {
 };
 
 type SavedStudyState = {
+  version?: 3;
   records?: Record<string, WordRecord>;
   saved?: string[];
   completedTracks?: string[];
@@ -2955,12 +2958,14 @@ function getExampleChinese(entry: WordEntry) {
 
 function LearningCard({
   word,
+  locale,
   label = "WORD IN CONTEXT",
   tone = "neutral",
   compact = false,
   onClose,
 }: {
   word: string;
+  locale: Locale;
   label?: string;
   tone?: "neutral" | "choice" | "correct";
   compact?: boolean;
@@ -2971,7 +2976,7 @@ function LearningCard({
   const exampleChinese = getExampleChinese(entry);
 
   return (
-    <article className={`learning-card tone-${tone}${compact ? " is-compact" : ""}`} aria-label={`${word} learning card`}>
+    <article className={`learning-card tone-${tone}${compact ? " is-compact" : ""}`} aria-label={translate(locale, "wordCardAria", { word })}>
       <header className="learning-card-head">
         <div>
           <small>{label}</small>
@@ -2981,7 +2986,7 @@ function LearningCard({
           <em>{phoneticGlossary[word]}</em>
           <span>{entry.part}</span>
           <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
-          {onClose && <button className="learning-card-close" onClick={onClose} aria-label="Close word card">x</button>}
+          {onClose && <button className="learning-card-close" onClick={onClose} aria-label={translate(locale, "closeCard")}>x</button>}
         </div>
       </header>
       <div className="learning-card-meaning">
@@ -3052,7 +3057,8 @@ const learningTracks = [
 
 type Track = (typeof learningTracks)[number];
 
-const STORAGE_KEY = "wordoria-study-state-v2";
+const STORAGE_KEY = "wordoria-study-state-v3";
+const LEGACY_STORAGE_KEY = "wordoria-study-state-v2";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MEMORY_TIERS: MemoryTier[] = [
   { label: "DORMANT", level: 1, min: 0, max: 19, saturation: 0, graceDays: 1, decayPerDay: 5 },
@@ -3251,6 +3257,7 @@ function makeReviewQuestion(word: string): Question {
   return {
     correct: word,
     prompt: `Review miss: which word means "${entry?.definition ?? glossary[word]}"?`,
+    promptCn: translate("zh", "reviewQuestion", { definition: chineseGlossary[word] }),
     options: shuffleArray([word, ...pickDistractors(word)]),
   };
 }
@@ -3261,6 +3268,7 @@ function makeDefinitionQuestion(word: string): Question {
   return {
     correct: word,
     prompt: `Which word means "${entry.definition}"?`,
+    promptCn: translate("zh", "definitionQuestion", { definition: chineseGlossary[word] }),
     options: shuffleArray([word, ...pickDistractors(word)]),
   };
 }
@@ -3453,6 +3461,7 @@ export default function Home() {
   const [sessionWords, setSessionWords] = useState<string[]>([]);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
+  const [locale, setLocale] = useState<Locale>("en");
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicUnavailable, setMusicUnavailable] = useState(false);
   const [memoryNow, setMemoryNow] = useState(0);
@@ -3466,6 +3475,8 @@ export default function Home() {
   const pendingMemoryAnimationRef = useRef<MemoryAnimation | null>(null);
   const trackBurstTimerRef = useRef<number | null>(null);
   const videoTourRunRef = useRef(0);
+  const t = (key: UiKey, variables: Record<string, string | number> = {}) => translate(locale, key, variables);
+  const localizedTrack = (track: Track) => getTrackCopy(locale, track.name);
 
   const activeTrack = activeTrackIndex === null ? null : learningTracks[activeTrackIndex];
   const activeQuestion = taskQueue[taskStep] ?? null;
@@ -3520,16 +3531,37 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const stored = JSON.parse(raw) as SavedStudyState;
-        if (stored.records) setRecords(stored.records);
-        if (Array.isArray(stored.saved)) setSaved(stored.saved.filter((word) => wordMap[word]));
-        if (Array.isArray(stored.completedTracks)) setCompletedTracks(stored.completedTracks);
-        if (typeof stored.xp === "number") setXp(stored.xp);
+      const candidates = [STORAGE_KEY, LEGACY_STORAGE_KEY];
+      let stored: SavedStudyState | null = null;
+
+      for (const key of candidates) {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const candidate = JSON.parse(raw) as unknown;
+          if (candidate && typeof candidate === "object") {
+            stored = candidate as SavedStudyState;
+            break;
+          }
+        } catch {
+          // A damaged current save should not prevent recovery from the legacy backup.
+        }
+      }
+
+      if (stored) {
+        if (stored.records && typeof stored.records === "object") {
+          setRecords(Object.fromEntries(
+            Object.entries(stored.records).filter(([word, record]) => Boolean(wordMap[word]) && record && typeof record === "object"),
+          ));
+        }
+        if (Array.isArray(stored.saved)) setSaved(stored.saved.filter((word) => typeof word === "string" && wordMap[word]));
+        if (Array.isArray(stored.completedTracks)) {
+          setCompletedTracks(stored.completedTracks.filter((name) => learningTracks.some((track) => track.name === name)));
+        }
+        if (typeof stored.xp === "number" && Number.isFinite(stored.xp)) setXp(Math.max(0, stored.xp));
       }
     } catch {
-      // If browser storage is unavailable or corrupted, Wordoria simply starts fresh.
+      // If browser storage is unavailable, Wordoria simply starts fresh.
     } finally {
       setStorageReady(true);
     }
@@ -3597,13 +3629,17 @@ export default function Home() {
   useEffect(() => {
     if (!storageReady) return;
 
-    const payload: SavedStudyState = { records, saved, completedTracks, xp };
+    const payload: SavedStudyState = { version: 3, records, saved, completedTracks, xp };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // Local learning still works even when storage is full or blocked.
     }
   }, [completedTracks, records, saved, storageReady, xp]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }, [locale]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3937,18 +3973,27 @@ export default function Home() {
     const entry = wordMap[word];
     const record = records[word];
     if (!entry) return null;
+    const recordStatus = !record
+      ? t("savedState")
+      : record.last === "Strengthened"
+        ? t("strengthened")
+        : record.last === "Needs review"
+          ? t("needsReview")
+          : record.last === "New"
+            ? t("newWord")
+            : record.last;
 
     return (
       <article className="record-card" key={word}>
         <div>
           <strong>{entry.word}</strong>
-          <small>{entry.part} / {record?.last ?? "Saved"}</small>
+          <small>{entry.part} / {recordStatus}</small>
         </div>
         <em className="record-phonetic">{phoneticGlossary[word]}</em>
         <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
         <p className="record-cn">{chineseGlossary[word]}</p>
         {entry.definition !== chineseGlossary[word] && <p>{entry.definition}</p>}
-        <span>Seen {record?.seen ?? 0} / Missed {record?.missed ?? 0}</span>
+        <span>{t("seenMissed", { seen: record?.seen ?? 0, missed: record?.missed ?? 0 })}</span>
       </article>
     );
   };
@@ -3967,21 +4012,26 @@ export default function Home() {
         <source src="https://upload.wikimedia.org/wikipedia/commons/e/e8/FChopinPreludeOp28n4.OGG" type="audio/ogg" />
       </audio>
       <header className="nav-shell">
-        <p>Vocabulary is not memorisation.<br />It is a way of seeing.</p>
+        <p>{t("tagline").split("\n")[0]}<br />{t("tagline").split("\n")[1]}</p>
         <div className="nav-actions">
           <button
             className={`music-button${musicPlaying ? " is-playing" : ""}`}
             onClick={toggleMusic}
-            aria-label={musicUnavailable ? "Piano music unavailable" : musicPlaying ? "Pause piano music" : "Play piano music"}
+            aria-label={musicUnavailable ? t("musicUnavailableAria") : musicPlaying ? t("pauseMusicAria") : t("playMusicAria")}
             aria-pressed={musicPlaying}
             disabled={musicUnavailable}
             title="Chopin · Prelude in E minor"
           >
             <span className="music-bars" aria-hidden="true"><i /><i /><i /></span>
-            <span>{musicUnavailable ? "MUSIC OFFLINE" : musicPlaying ? "PIANO ON" : "PIANO"}</span>
+            <span>{musicUnavailable ? t("musicUnavailable") : musicPlaying ? t("musicOn") : t("music")}</span>
           </button>
-          <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>
-            MENU ::
+          <div className="language-switch" role="group" aria-label={locale === "zh" ? "选择界面语言" : "Choose interface language"}>
+            <button className={locale === "en" ? "is-active" : ""} onClick={() => setLocale("en")} aria-pressed={locale === "en"}>EN</button>
+            <i aria-hidden="true">/</i>
+            <button className={locale === "zh" ? "is-active" : ""} onClick={() => setLocale("zh")} aria-pressed={locale === "zh"}>中</button>
+          </div>
+          <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label={t("openMenu")} aria-expanded={menuOpen}>
+            {t("menu")}
           </button>
         </div>
       </header>
@@ -3992,12 +4042,12 @@ export default function Home() {
           <a
             className="hero-cta"
             href="#practice"
-            aria-label={`${recordedWords.length ? "Continue" : "Begin"} a five-word study session`}
+            aria-label={t("studySessionAria", { action: recordedWords.length ? t("continue") : t("begin") })}
           >
             <span className="hero-cta-index">01</span>
             <span className="hero-cta-copy">
-              <strong>{recordedWords.length ? "CONTINUE STUDY" : "BEGIN STUDY"}</strong>
-              <small>5 WORDS / ABOUT 2 MIN</small>
+              <strong>{recordedWords.length ? t("continueStudy") : t("beginStudy")}</strong>
+              <small>{t("studyDuration")}</small>
             </span>
             <span className="hero-cta-arrow" aria-hidden="true">-&gt;</span>
           </a>
@@ -4009,38 +4059,38 @@ export default function Home() {
             ))}
           </div>
           <div className="hero-corners">
-            <strong>VISUAL LEXICON STUDIO</strong>
-            <span>LEXICON / JOURNAL&nbsp;&nbsp;&nbsp;&nbsp; EN</span>
+            <strong>{t("studio")}</strong>
+            <span>{t("cornerLinks")}&nbsp;&nbsp;&nbsp;&nbsp; {locale === "zh" ? "中" : "EN"}</span>
           </div>
-          <nav className="hero-route" aria-label="Explore Wordoria">
+          <nav className="hero-route" aria-label={t("routeAria")}>
             <a href="#practice">
               <span>01</span>
-              <strong>Practice</strong>
-              <small>Build recall</small>
+              <strong>{t("practice")}</strong>
+              <small>{t("practiceNote")}</small>
             </a>
             <a href="#journal">
               <span>02</span>
-              <strong>Visual journal</strong>
-              <small>See memory</small>
+              <strong>{t("visualJournal")}</strong>
+              <small>{t("journalNote")}</small>
             </a>
             <a href="#archive">
               <span>03</span>
-              <strong>Lexicon</strong>
-              <small>Review words</small>
+              <strong>{t("lexicon")}</strong>
+              <small>{t("lexiconNote")}</small>
             </a>
           </nav>
         </div>
       </section>
 
-      <section className="marquee" aria-label="Vocabulary themes">
-        <div>ARTICULATE / OBSERVE / INTERPRET / REMEMBER / ARTICULATE / OBSERVE / INTERPRET / REMEMBER /</div>
+      <section className="marquee" aria-label={locale === "zh" ? "词汇主题" : "Vocabulary themes"}>
+        <div>{t("marquee")}</div>
       </section>
 
       <section className="practice" id="practice">
         <div className="section-intro">
-          <p className="overline">YOUR DAILY PRACTICE</p>
-          <h2>Precision is<br /><em>a habit.</em></h2>
-          <p>Three focused exercises. Wrong answers return until they become familiar.</p>
+          <p className="overline">{t("dailyPractice")}</p>
+          <h2>{t("practiceTitleA")}<br /><em>{t("practiceTitleB")}</em></h2>
+          <p>{t("practiceIntro")}</p>
         </div>
         <div className="task-list">
           <PracticeGlassScene
@@ -4057,11 +4107,11 @@ export default function Home() {
               onPointerEnter={() => setHoveredTrackIndex(index)}
               onFocus={() => setHoveredTrackIndex(index)}
               onBlur={() => setHoveredTrackIndex(null)}
-              aria-label={task.name + ": " + task.detail}
+              aria-label={localizedTrack(task).name + ": " + localizedTrack(task).detail}
             >
               <span>{task.index}</span>
-              <strong>{task.name}</strong>
-              <small>{task.detail}</small>
+              <strong>{localizedTrack(task).name}</strong>
+              <small>{localizedTrack(task).detail}</small>
               <i><b style={{ width: `${Math.min(100, task.progress + completedTracks.length * 8)}%` }} /></i>
               <em>+{task.reward} XP</em>
               <b className="task-arrow">-&gt;</b>
@@ -4073,26 +4123,26 @@ export default function Home() {
       <section className="journal" id="journal">
         <div className="journal-head">
           <div>
-            <p className="overline">THE VISUAL JOURNAL / ISSUE {journalIssue}</p>
-            <h2>Read the image.<br />Refine the language.</h2>
+            <p className="overline">{t("journalIssue", { issue: journalIssue })}</p>
+            <h2>{t("journalTitleA")}<br />{t("journalTitleB")}</h2>
           </div>
-          <p>Selected photography becomes a mnemonic field: composition, texture, and atmosphere give advanced words somewhere meaningful to live.</p>
+          <p>{t("journalIntro")}</p>
         </div>
-        <div className="journal-controls" aria-label="Visual journal collections">
-          <button onClick={() => turnJournalPage(-1)}>Previous collection</button>
+        <div className="journal-controls" aria-label={t("journalCollectionsAria")}>
+          <button onClick={() => turnJournalPage(-1)}>{t("previousCollection")}</button>
           <span>{journalIssue} / {String(photographCollections.length).padStart(2, "0")}</span>
-          <button onClick={() => turnJournalPage(1)}>Next collection</button>
+          <button onClick={() => turnJournalPage(1)}>{t("nextCollection")}</button>
         </div>
-        <aside className="memory-legend" aria-label="Memory color scale">
+        <aside className="memory-legend" aria-label={t("memoryScaleAria")}>
           <div className="memory-legend-copy">
-            <span>MEMORY COLOR</span>
-            <p><strong>As recall strengthens, color returns.</strong><br />Time and mistakes let it fade.</p>
+            <span>{t("memoryColor")}</span>
+            <p><strong>{t("memoryStrong")}</strong><br />{t("memoryFade")}</p>
           </div>
           <ol>
-            <li><i aria-hidden="true" /><span><b>DORMANT</b><small>0%</small></span></li>
-            <li><i aria-hidden="true" /><span><b>TRACE</b><small>25%</small></span></li>
-            <li><i aria-hidden="true" /><span><b>FAMILIAR</b><small>60%</small></span></li>
-            <li><i aria-hidden="true" /><span><b>ROOTED</b><small>100%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>{t("dormant")}</b><small>0%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>{t("trace")}</b><small>25%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>{t("familiar")}</b><small>60%</small></span></li>
+            <li><i aria-hidden="true" /><span><b>{t("rooted")}</b><small>100%</small></span></li>
           </ol>
         </aside>
         <div className="photo-grid" key={journalPage}>
@@ -4128,14 +4178,14 @@ export default function Home() {
                     setSelected(photo);
                     setStudyAnswer(null);
                   }}
-                  aria-label={"Study " + photo.word + ". Memory " + memory.tier.level + " " + memory.tier.label}
+                  aria-label={t("studyPhotoAria", { word: photo.word, level: memory.tier.level, tier: getMemoryTierLabel(locale, memory.tier.label) })}
                 >
-                  <span className="photo-frame"><img src={photo.image} alt={photo.title} /><i>VIEW STUDY -&gt;</i></span>
+                  <span className="photo-frame"><img src={photo.image} alt={photo.title} /><i>{t("viewStudy")}</i></span>
                   <span className="photo-meta">
                     <small>{photo.id} / {photo.category} / {wordLevelGlossary[photo.word]}</small>
                     <strong>{photo.title}</strong>
                     <em>{photo.word}</em>
-                    <span className="memory-status">MEMORY {String(memory.tier.level).padStart(2, "0")} / {memory.tier.label}</span>
+                    <span className="memory-status">{t("memoryStatus", { level: String(memory.tier.level).padStart(2, "0"), tier: getMemoryTierLabel(locale, memory.tier.label) })}</span>
                   </span>
                 </button>
               </article>
@@ -4145,29 +4195,29 @@ export default function Home() {
       </section>
 
       <section className="quote-band">
-        <p>"Language becomes memorable when it is attached to a way of seeing."</p>
-        <span>WORDORIA / PRINCIPLE 01</span>
+        <p>{t("principleQuote")}</p>
+        <span>{t("principle")}</span>
       </section>
 
       <section className="archive" id="archive">
-        <div><p className="overline">PERSONAL LEXICON</p><h2>{wordBank.length} words,<br />ready to collect.</h2></div>
+        <div><p className="overline">{t("personalLexicon")}</p><h2>{t("readyToCollect", { count: wordBank.length }).split("\n")[0]}<br />{t("readyToCollect", { count: wordBank.length }).split("\n")[1]}</h2></div>
         <div className="archive-stats">
-          <span><strong>{xp}</strong><small>Practice XP</small></span>
-          <span><strong>300</strong><small>CET-4 core</small></span>
-          <span><strong>300</strong><small>CET-6 core</small></span>
-          <span><strong>100</strong><small>Contest boost</small></span>
-          <span><strong>{missedWords.length.toString().padStart(2, "0")}</strong><small>Need review</small></span>
-          <span><strong>{saved.length.toString().padStart(2, "0")}</strong><small>Saved words</small></span>
+          <span><strong>{xp}</strong><small>{t("practiceXp")}</small></span>
+          <span><strong>300</strong><small>{t("cet4Core")}</small></span>
+          <span><strong>300</strong><small>{t("cet6Core")}</small></span>
+          <span><strong>100</strong><small>{t("contestBoost")}</small></span>
+          <span><strong>{missedWords.length.toString().padStart(2, "0")}</strong><small>{t("needReview")}</small></span>
+          <span><strong>{saved.length.toString().padStart(2, "0")}</strong><small>{t("savedWords")}</small></span>
         </div>
-        <button className="outline-button" onClick={() => setArchiveOpen(true)}>Open records <span>-&gt;</span></button>
+        <button className="outline-button" onClick={() => setArchiveOpen(true)}>{t("openRecords")} <span>-&gt;</span></button>
       </section>
 
       <footer>
         <a className="wordmark light" href="#top">WORDORIA<span>(R)</span></a>
-        <p>A visual vocabulary practice<br />for ambitious English learners.</p>
-        <div><a href="#practice">Practice</a><a href="#journal">Journal</a><a href="#archive">Lexicon</a></div>
+        <p>{t("footerIntro").split("\n")[0]}<br />{t("footerIntro").split("\n")[1]}</p>
+        <div><a href="#practice">{t("practice")}</a><a href="#journal">{t("visualJournal")}</a><a href="#archive">{t("lexicon")}</a></div>
         <small>
-          Photography sourced from Unsplash. Music: Chopin, Prelude in E Minor, performed by Porticodoro / SmartCGArt Media Productions,
+          {t("footerCredit")}
           {" "}<a href="https://commons.wikimedia.org/wiki/File:FChopinPreludeOp28n4.OGG" target="_blank" rel="noreferrer">CC BY 3.0</a>. (c) 2026 Wordoria.
         </small>
       </footer>
@@ -4276,48 +4326,49 @@ export default function Home() {
       )}
 
       {menuOpen && (
-        <div className="menu-overlay" role="dialog" aria-modal="true" aria-label="Main menu">
-          <button className="modal-close" onClick={closeAll}>CLOSE x</button>
-          <p>WORDORIA / NAVIGATION</p>
+        <div className="menu-overlay" role="dialog" aria-modal="true" aria-label={locale === "zh" ? "主菜单" : "Main menu"}>
+          <button className="modal-close" onClick={closeAll}>{t("close")}</button>
+          <p>{t("navigation")}</p>
           <nav>
-            <a href="#practice" onClick={closeAll}>Practice <span>01</span></a>
-            <a href="#journal" onClick={closeAll}>Visual journal <span>02</span></a>
-            <a href="#archive" onClick={closeAll}>Personal lexicon <span>03</span></a>
+            <a href="#practice" onClick={closeAll}>{t("practice")} <span>01</span></a>
+            <a href="#journal" onClick={closeAll}>{t("visualJournal")} <span>02</span></a>
+            <a href="#archive" onClick={closeAll}>{t("personalLexicon")} <span>03</span></a>
           </nav>
         </div>
       )}
 
       {activeTrack && (
-        <div className={`task-overlay${taskAnswer ? " has-answer" : ""}`} role="dialog" aria-modal="true" aria-label={`${activeTrack.name} exercise`}>
-          <button className="modal-close" onClick={closeAll}>CLOSE x</button>
-          <p className="overline">DAILY PRACTICE / {activeTrack.index}</p>
-          <h3>{activeTrack.name}</h3>
-          <div className="task-progress" aria-label={`${Math.min(taskStep + 1, taskQueue.length)} of ${taskQueue.length}`}>
+        <div className={`task-overlay${taskAnswer ? " has-answer" : ""}`} role="dialog" aria-modal="true" aria-label={t("exerciseAria", { track: localizedTrack(activeTrack).name })}>
+          <button className="modal-close" onClick={closeAll}>{t("close")}</button>
+          <p className="overline">{t("dailyPracticeModal", { index: activeTrack.index })}</p>
+          <h3>{localizedTrack(activeTrack).name}</h3>
+          <div className="task-progress" aria-label={t("progressAria", { current: Math.min(taskStep + 1, taskQueue.length), total: taskQueue.length })}>
             <b style={{ width: `${Math.min(taskStep, taskQueue.length) / Math.max(taskQueue.length, 1) * 100}%` }} />
           </div>
 
           {isTaskComplete ? (
             <div className="task-complete">
-              <p className="task-prompt">Ring complete. Your record has been updated. Do you want to enter {nextTrack?.name} next?</p>
+              <p className="task-prompt">{t("ringComplete", { track: nextTrack ? localizedTrack(nextTrack).name : "" })}</p>
               <div className="session-strip">
                 {sessionWords.map((word) => <span key={word}>{word}</span>)}
               </div>
               <div className="task-actions">
-                <button onClick={goToNextTrack}>Enter {nextTrack?.name}</button>
-                <button onClick={() => setArchiveOpen(true)}>View records</button>
-                <button onClick={closeAll}>Finish for now</button>
+                <button onClick={goToNextTrack}>{t("enterTrack", { track: nextTrack ? localizedTrack(nextTrack).name : "" })}</button>
+                <button onClick={() => setArchiveOpen(true)}>{t("viewRecords")}</button>
+                <button onClick={closeAll}>{t("finishNow")}</button>
               </div>
             </div>
           ) : activeQuestion ? (
             <>
-              <p className="task-count">Question {taskStep + 1} / {taskQueue.length}</p>
-              <p className="task-prompt">{activeQuestion.prompt}</p>
+              <p className="task-count">{t("questionCount", { current: taskStep + 1, total: taskQueue.length })}</p>
+              <p className="task-prompt">{locale === "zh" ? activeQuestion.promptCn ?? activeQuestion.prompt : activeQuestion.prompt}</p>
               <div className="task-option-area">
                 {taskAnswer && inspectedOption && (
                   <div className="option-inspector">
                     <LearningCard
                       word={inspectedOption}
-                      label="OPTION PREVIEW"
+                      locale={locale}
+                      label={t("optionPreview")}
                       compact
                       onClose={() => setInspectedOption(null)}
                     />
@@ -4343,24 +4394,24 @@ export default function Home() {
                 <div className="task-feedback">
                   {taskAnswer === activeQuestion.correct ? (
                     <div className="task-result is-correct">
-                      <strong>PRECISELY</strong>
-                      <span>You chose {activeQuestion.correct}. Memory strengthened. +{activeTrack.reward} XP</span>
-                      <span lang="zh-CN">回答正确，记忆色彩已经加深。</span>
+                      <strong>{t("precisely")}</strong>
+                      <span>{t("correctFeedback", { word: activeQuestion.correct, xp: activeTrack.reward })}</span>
+
                     </div>
                   ) : (
                     <div className="task-result is-incorrect">
-                      <strong>NOT QUITE</strong>
-                      <span>You chose {taskAnswer}. The correct answer is {activeQuestion.correct}.</span>
-                      <span lang="zh-CN">你选择了 {taskAnswer}，正确答案是 {activeQuestion.correct}。</span>
+                      <strong>{t("notQuite")}</strong>
+                      <span>{t("incorrectFeedback", { choice: taskAnswer, correct: activeQuestion.correct })}</span>
+
                     </div>
                   )}
                   <div className={`answer-cards${taskAnswer === activeQuestion.correct ? " is-single" : ""}`}>
                     {taskAnswer !== activeQuestion.correct && (
-                      <LearningCard word={taskAnswer} label="YOUR CHOICE / 你的选择" tone="choice" compact />
+                      <LearningCard word={taskAnswer} locale={locale} label={t("yourChoice")} tone="choice" compact />
                     )}
-                    <LearningCard word={activeQuestion.correct} label="CORRECT ANSWER / 正确答案" tone="correct" />
+                    <LearningCard word={activeQuestion.correct} locale={locale} label={t("correctAnswer")} tone="correct" />
                   </div>
-                  <button onClick={goToNextQuestion}>{taskStep === taskQueue.length - 1 ? "Complete ring" : "Next word"}</button>
+                  <button onClick={goToNextQuestion}>{taskStep === taskQueue.length - 1 ? t("completeRing") : t("nextWord")}</button>
                 </div>
               )}
             </>
@@ -4369,41 +4420,41 @@ export default function Home() {
       )}
 
       {archiveOpen && (
-        <div className="lexicon-overlay record-overlay" role="dialog" aria-modal="true" aria-label="Personal lexicon">
-          <button className="modal-close" onClick={closeAll}>CLOSE x</button>
-          <p className="overline">PERSONAL LEXICON</p>
-          <h3>Your recorded words.</h3>
+        <div className="lexicon-overlay record-overlay" role="dialog" aria-modal="true" aria-label={t("personalLexicon")}>
+          <button className="modal-close" onClick={closeAll}>{t("close")}</button>
+          <p className="overline">{t("personalLexicon")}</p>
+          <h3>{t("recordedWords")}</h3>
           <div className="record-summary">
-            <span><strong>{recordedWords.length}</strong><small>Recorded</small></span>
-            <span><strong>{missedWords.length}</strong><small>Review loop</small></span>
-            <span><strong>{completedTracks.length}</strong><small>Rings complete</small></span>
+            <span><strong>{recordedWords.length}</strong><small>{t("recorded")}</small></span>
+            <span><strong>{missedWords.length}</strong><small>{t("reviewLoop")}</small></span>
+            <span><strong>{completedTracks.length}</strong><small>{t("ringsComplete")}</small></span>
           </div>
           <div className="record-columns">
             <section>
-              <h4>Needs review</h4>
-              {missedWords.length ? missedWords.map(renderWordCard) : <p className="empty-state">No missed words yet.</p>}
+              <h4>{t("needsReview")}</h4>
+              {missedWords.length ? missedWords.map(renderWordCard) : <p className="empty-state">{t("noMissed")}</p>}
             </section>
             <section>
-              <h4>Recorded</h4>
-              {recordedWords.length ? recordedWords.map(renderWordCard) : <p className="empty-state">Complete a practice ring to record words.</p>}
+              <h4>{t("recorded")}</h4>
+              {recordedWords.length ? recordedWords.map(renderWordCard) : <p className="empty-state">{t("noRecorded")}</p>}
             </section>
             <section>
-              <h4>Saved</h4>
-              {savedEntries.length ? savedEntries.map(renderWordCard) : <p className="empty-state">Open a visual study and choose SAVE + to build this shelf.</p>}
+              <h4>{t("saved")}</h4>
+              {savedEntries.length ? savedEntries.map(renderWordCard) : <p className="empty-state">{t("noSaved")}</p>}
             </section>
           </div>
         </div>
       )}
 
       {selected && (
-        <div className="study-overlay" role="dialog" aria-modal="true" aria-label={`Study ${selected.word}`}>
-          <button className="modal-close" onClick={closeAll}>CLOSE x</button>
+        <div className="study-overlay" role="dialog" aria-modal="true" aria-label={t("studyPhotoAria", { word: selected.word, level: getMemoryPresentation(records[selected.word], memoryNow).tier.level, tier: getMemoryTierLabel(locale, getMemoryPresentation(records[selected.word], memoryNow).tier.label) })}>
+          <button className="modal-close" onClick={closeAll}>{t("close")}</button>
           <div className="study-image"><img src={selected.image} alt={selected.title} /><small>{selected.credit}</small></div>
           <div className="study-copy">
-            <p className="overline">VISUAL STUDY / {selected.id}</p>
+            <p className="overline">{t("visualStudy", { id: selected.id })}</p>
             <div className="word-title">
               <h3 data-word={selected.word}>{selected.word}</h3>
-              <button onClick={() => toggleSave(selected.word)} aria-label="Save word">{saved.includes(selected.word) ? "SAVED" : "SAVE +"}</button>
+              <button onClick={() => toggleSave(selected.word)} aria-label={t("saveWord")}>{saved.includes(selected.word) ? t("savedState") : t("save")}</button>
             </div>
             <span className="phonetic">{phoneticGlossary[selected.word]} · {selected.part}</span>
             <span className={getLevelClassName(selected.word)}>{wordLevelGlossary[selected.word]}</span>
@@ -4414,8 +4465,8 @@ export default function Home() {
               {getExampleChinese(wordMap[selected.word]) && <p className="study-example-cn" lang="zh-CN">{getExampleChinese(wordMap[selected.word])}</p>}
             </blockquote>
             <div className="challenge">
-              <small>CONTEXT CHECK</small>
-              <p>Which word best matches this visual study?</p>
+              <small>{t("contextCheck")}</small>
+              <p>{t("contextQuestion")}</p>
               <div>
                 {getStudyOptions(selected).map((option) => (
                   <button
@@ -4434,11 +4485,20 @@ export default function Home() {
               {studyAnswer && (
                 <>
                   <em>
-                    {studyAnswer === selected.word
-                      ? `Precisely. ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}. +25 XP`
-                      : `Not quite. ${studyAnswer} ${phoneticGlossary[studyAnswer]} [${wordLevelGlossary[studyAnswer]}] means "${glossary[studyAnswer]}". CN: ${chineseGlossary[studyAnswer]}; ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}.`}
+                    {locale === "zh"
+                      ? studyAnswer === selected.word
+                        ? t("visualCorrect", { word: selected.word, definition: chineseGlossary[selected.word] })
+                        : t("visualIncorrect", {
+                            choice: studyAnswer,
+                            choiceDefinition: chineseGlossary[studyAnswer],
+                            word: selected.word,
+                            definition: chineseGlossary[selected.word],
+                          })
+                      : studyAnswer === selected.word
+                        ? `Precisely. ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}. +25 XP`
+                        : `Not quite. ${studyAnswer} ${phoneticGlossary[studyAnswer]} [${wordLevelGlossary[studyAnswer]}] means "${glossary[studyAnswer]}". CN: ${chineseGlossary[studyAnswer]}; ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}.`}
                   </em>
-                  <button className="study-next-button" onClick={openNextStudy}>Next visual study -&gt;</button>
+                  <button className="study-next-button" onClick={openNextStudy}>{t("nextVisualStudy")}</button>
                 </>
               )}
             </div>
