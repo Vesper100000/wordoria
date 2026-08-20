@@ -75,6 +75,13 @@ type SavedStudyState = {
   saved?: string[];
   completedTracks?: string[];
   xp?: number;
+  preferences?: {
+    locale?: Locale;
+  };
+  dailyPractice?: {
+    date: string;
+    counts: Record<string, number>;
+  };
 };
 
 type Photograph = {
@@ -3461,6 +3468,8 @@ export default function Home() {
   const [sessionWords, setSessionWords] = useState<string[]>([]);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
+  const [storageError, setStorageError] = useState(false);
+  const [dailyPractice, setDailyPractice] = useState<{ date: string; counts: Record<string, number> }>({ date: "", counts: {} });
   const [locale, setLocale] = useState<Locale>("en");
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicUnavailable, setMusicUnavailable] = useState(false);
@@ -3533,6 +3542,8 @@ export default function Home() {
     try {
       const candidates = [STORAGE_KEY, LEGACY_STORAGE_KEY];
       let stored: SavedStudyState | null = null;
+      const today = getLocalDayStamp(Date.now());
+      setDailyPractice({ date: today, counts: {} });
 
       for (const key of candidates) {
         const raw = window.localStorage.getItem(key);
@@ -3559,8 +3570,23 @@ export default function Home() {
           setCompletedTracks(stored.completedTracks.filter((name) => learningTracks.some((track) => track.name === name)));
         }
         if (typeof stored.xp === "number" && Number.isFinite(stored.xp)) setXp(Math.max(0, stored.xp));
+        if (stored.preferences?.locale === "en" || stored.preferences?.locale === "zh") {
+          setLocale(stored.preferences.locale);
+        }
+        if (stored.dailyPractice?.date === today && stored.dailyPractice.counts && typeof stored.dailyPractice.counts === "object") {
+          setDailyPractice({
+            date: today,
+            counts: Object.fromEntries(
+              learningTracks.map((track) => [
+                track.name,
+                Math.min(5, Math.max(0, Number(stored.dailyPractice?.counts[track.name]) || 0)),
+              ]),
+            ),
+          });
+        }
       }
     } catch {
+      setStorageError(true);
       // If browser storage is unavailable, Wordoria simply starts fresh.
     } finally {
       setStorageReady(true);
@@ -3629,13 +3655,44 @@ export default function Home() {
   useEffect(() => {
     if (!storageReady) return;
 
-    const payload: SavedStudyState = { version: 3, records, saved, completedTracks, xp };
+    const payload: SavedStudyState = {
+      version: 3,
+      records,
+      saved,
+      completedTracks,
+      xp,
+      preferences: { locale },
+      dailyPractice,
+    };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      setStorageError(false);
     } catch {
-      // Local learning still works even when storage is full or blocked.
+      setStorageError(true);
     }
-  }, [completedTracks, records, saved, storageReady, xp]);
+  }, [completedTracks, dailyPractice, locale, records, saved, storageReady, xp]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+
+    const resetIfNewDay = () => {
+      const today = getLocalDayStamp(Date.now());
+      setDailyPractice((current) => current.date === today ? current : { date: today, counts: {} });
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) resetIfNewDay();
+    };
+
+    resetIfNewDay();
+    const timer = window.setInterval(resetIfNewDay, 60 * 1000);
+    window.addEventListener("focus", resetIfNewDay);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", resetIfNewDay);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [storageReady]);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -3919,6 +3976,19 @@ export default function Home() {
     if (!isCorrect && wordMap[option]) updateRecord(option, false);
     setSessionWords((current) => Array.from(new Set([...current, activeQuestion.correct, option].filter(Boolean))));
     setXp((current) => current + (isCorrect && activeTrack ? activeTrack.reward : 5));
+    if (activeTrack) {
+      setDailyPractice((current) => {
+        const today = getLocalDayStamp(Date.now());
+        const counts = current.date === today ? current.counts : {};
+        return {
+          date: today,
+          counts: {
+            ...counts,
+            [activeTrack.name]: Math.min(5, (counts[activeTrack.name] ?? 0) + 1),
+          },
+        };
+      });
+    }
   };
 
   const goToNextQuestion = () => {
@@ -4011,6 +4081,12 @@ export default function Home() {
         <source src="https://upload.wikimedia.org/wikipedia/commons/transcoded/e/e8/FChopinPreludeOp28n4.OGG/FChopinPreludeOp28n4.OGG.mp3" type="audio/mpeg" />
         <source src="https://upload.wikimedia.org/wikipedia/commons/e/e8/FChopinPreludeOp28n4.OGG" type="audio/ogg" />
       </audio>
+      {storageError && (
+        <aside className="storage-warning" role="alert">
+          <strong>{t("storageWarningTitle")}</strong>
+          <span>{t("storageWarningBody")}</span>
+        </aside>
+      )}
       <header className="nav-shell">
         <p>{t("tagline").split("\n")[0]}<br />{t("tagline").split("\n")[1]}</p>
         <div className="nav-actions">
@@ -4112,8 +4188,8 @@ export default function Home() {
               <span>{task.index}</span>
               <strong>{localizedTrack(task).name}</strong>
               <small>{localizedTrack(task).detail}</small>
-              <i><b style={{ width: `${Math.min(100, task.progress + completedTracks.length * 8)}%` }} /></i>
-              <em>+{task.reward} XP</em>
+              <i><b style={{ width: `${Math.min(5, dailyPractice.counts[task.name] ?? 0) / 5 * 100}%` }} /></i>
+              <em>{t("todayProgress", { current: Math.min(5, dailyPractice.counts[task.name] ?? 0), total: 5 })} · +{task.reward} XP</em>
               <b className="task-arrow">-&gt;</b>
             </button>
           ))}
