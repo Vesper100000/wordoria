@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { verifiedExamLexicon } from "../app/verified-exam-lexicon.ts";
+import { vocabularyMemberships } from "../app/vocabulary-memberships.ts";
 import { wordExamples } from "../app/word-examples.ts";
 
 const page = fs.readFileSync("app/page.tsx", "utf8");
@@ -64,6 +65,14 @@ const examples = Object.values(wordExamples).map((item) => item.example.toLowerC
 if (new Set(examples).size !== examples.length) failures.push("duplicate example sentences found");
 if (Object.keys(wordExamples).length !== words.length) failures.push(`example count mismatch: expected ${words.length}, got ${Object.keys(wordExamples).length}`);
 if (words.length !== 1113) failures.push(`word count changed: expected 1113, got ${words.length}`);
+
+for (const [listId, listWords] of Object.entries(vocabularyMemberships)) {
+  if (listWords.length !== 500) failures.push(`${listId}: expected 500 words, got ${listWords.length}`);
+  if (new Set(listWords).size !== listWords.length) failures.push(`${listId}: duplicate membership found`);
+  for (const word of listWords) {
+    if (!words.includes(word)) failures.push(`${listId}: unknown word ${word}`);
+  }
+}
 
 if (failures.length > 0) {
   console.error(`Lexicon validation failed with ${failures.length} issue(s):`);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import PracticeGlassScene from "./PracticeGlassScene";
 import { getMemoryTierLabel, getTrackCopy, translate, type Locale, type UiKey } from "./i18n";
 import { verifiedExamLexicon } from "./verified-exam-lexicon";
+import { vocabularyListIds, vocabularyMemberships, type VocabularyListId } from "./vocabulary-memberships";
 import { wordExamples } from "./word-examples";
 
 type WordEntry = {
@@ -13,11 +14,32 @@ type WordEntry = {
   cn?: string;
   phonetic?: string;
   level?: WordLevel;
+  lists?: VocabularyListId[];
   example: string;
   exampleCn?: string;
 };
 
 type WordLevel = "CET-4" | "CET-6" | "Contest" | "Visual" | "Advanced";
+type VocabularyList = { id: VocabularyListId; available: boolean };
+
+const vocabularyLists: VocabularyList[] = [
+  { id: "cet4", available: true },
+  { id: "cet6", available: true },
+  { id: "gaokao", available: true },
+  { id: "ielts", available: true },
+];
+const vocabularyMembershipSets: Record<VocabularyListId, Set<string>> = Object.fromEntries(
+  vocabularyListIds.map((listId) => [listId, new Set(vocabularyMemberships[listId])]),
+) as Record<VocabularyListId, Set<string>>;
+const defaultVocabularyLists: VocabularyListId[] = ["cet4", "cet6"];
+const vocabularyListNameKeys: Record<VocabularyListId, UiKey> = {
+  cet4: "vocabularyListCet4", cet6: "vocabularyListCet6",
+  gaokao: "vocabularyListGaokao", ielts: "vocabularyListIelts",
+};
+const vocabularyListDescriptionKeys: Record<VocabularyListId, UiKey> = {
+  cet4: "vocabularyListCet4Description", cet6: "vocabularyListCet6Description",
+  gaokao: "vocabularyListGaokaoDescription", ielts: "vocabularyListIeltsDescription",
+};
 
 type Question = {
   prompt: string;
@@ -77,6 +99,7 @@ type SavedStudyState = {
   xp?: number;
   preferences?: {
     locale?: Locale;
+    vocabularyLists?: VocabularyListId[];
   };
   dailyPractice?: {
     date: string;
@@ -1859,6 +1882,7 @@ function mergeWordEntries(entries: WordEntry[]) {
       ...previous,
       cn: previous.cn ?? entry.cn,
       level: previous.level ?? entry.level,
+      lists: Array.from(new Set([...(previous.lists ?? []), ...(entry.lists ?? [])])),
     });
   });
   return Array.from(merged.values());
@@ -1869,7 +1893,11 @@ const wordBank: WordEntry[] = mergeWordEntries([
   ...expandedWordBank,
   ...advancedWordBank,
   ...examWordBank,
-]).map((entry) => ({ ...entry, ...wordExamples[entry.word] }));
+]).map((entry) => ({
+  ...entry,
+  ...wordExamples[entry.word],
+  lists: vocabularyListIds.filter((listId) => vocabularyMembershipSets[listId].has(entry.word)),
+}));
 
 const coreChineseGlossary: Record<string, string> = {};
 
@@ -2963,6 +2991,33 @@ function getExampleChinese(entry: WordEntry) {
   return entry.exampleCn?.trim() || null;
 }
 
+function PronunciationButton({ word, locale }: { word: string; locale: Locale }) {
+  const speak = () => {
+    if (!("speechSynthesis" in window)) return;
+    const utterance = new SpeechSynthesisUtterance(word);
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find((candidate) => candidate.lang.toLowerCase().startsWith("en-gb"))
+      ?? voices.find((candidate) => candidate.lang.toLowerCase().startsWith("en"));
+    if (voice) utterance.voice = voice;
+    utterance.lang = voice?.lang ?? "en-GB";
+    utterance.rate = 0.86;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+
+  return (
+    <button
+      type="button"
+      className="pronunciation-button"
+      onClick={speak}
+      aria-label={translate(locale, "playPronunciation", { word })}
+      title={translate(locale, "playPronunciation", { word })}
+    >
+      <span aria-hidden="true">&#9654;</span>
+    </button>
+  );
+}
+
 function LearningCard({
   word,
   locale,
@@ -2991,6 +3046,7 @@ function LearningCard({
         </div>
         <div className="learning-card-meta">
           <em>{phoneticGlossary[word]}</em>
+          <PronunciationButton word={word} locale={locale} />
           <span>{entry.part}</span>
           <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
           {onClose && <button className="learning-card-close" onClick={onClose} aria-label={translate(locale, "closeCard")}>x</button>}
@@ -3248,6 +3304,13 @@ function getVisualPracticeWeight(word: string, records: Record<string, WordRecor
   return getWordWeight(word, records) + memoryBoost;
 }
 
+function getSelectedVocabularyWordSet(selectedLists: VocabularyListId[]) {
+  return new Set(wordBank.filter((entry) => entry.lists?.some((list) => selectedLists.includes(list))).map((entry) => entry.word));
+}
+function getVocabularyListCount(list: VocabularyListId) {
+  return wordBank.filter((entry) => entry.lists?.includes(list)).length;
+}
+
 function pickDistractors(correct: string, count = 2) {
   const entry = wordMap[correct];
   const samePart = shuffleArray(wordBank.filter((item) => item.word !== correct && item.part === entry?.part));
@@ -3289,11 +3352,13 @@ function uniqueQuestions(questions: Question[]) {
   });
 }
 
-function buildQueue(track: Track, records: Record<string, WordRecord>) {
+function buildQueue(track: Track, records: Record<string, WordRecord>, selectedLists: VocabularyListId[] = defaultVocabularyLists) {
   const trackNumber = Math.max(0, Number(track.index) - 1);
   const targetCount = 5;
+  const selectedWordSet = getSelectedVocabularyWordSet(selectedLists);
+  const regularPool = wordBank.filter((entry) => selectedWordSet.has(entry.word));
   const reviewWords = sampleWeighted(
-    Object.entries(records).filter(([word, record]) => Boolean(wordMap[word]) && record.missed > 0 && record.missed >= record.correct - 1),
+    Object.entries(records).filter(([word, record]) => Boolean(wordMap[word]) && (selectedWordSet.has(word) || isVisualPracticeWord(word)) && record.missed > 0 && record.missed >= record.correct - 1),
     2,
     ([word, record]) => getWordWeight(word, records) + record.missed * 3,
   ).map(([word]) => word);
@@ -3310,7 +3375,7 @@ function buildQueue(track: Track, records: Record<string, WordRecord>) {
 
   visualWords.forEach((word) => chosen.add(word));
   const freshWords = sampleWeighted(
-    wordBank.filter((entry, index) => index % learningTracks.length === trackNumber && !chosen.has(entry.word)),
+    regularPool.filter((entry, index) => index % learningTracks.length === trackNumber && !chosen.has(entry.word)),
     targetCount - reviewWords.length - visualWords.length,
     (entry) => getWordWeight(entry.word, records) * getExamPriorityWeight(entry.word),
   ).map((entry) => entry.word);
@@ -3460,6 +3525,8 @@ export default function Home() {
   const [taskAnswer, setTaskAnswer] = useState<string | null>(null);
   const [inspectedOption, setInspectedOption] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lexiconPickerOpen, setLexiconPickerOpen] = useState(false);
+  const [selectedVocabularyLists, setSelectedVocabularyLists] = useState<VocabularyListId[]>(defaultVocabularyLists);
   const [activeTrackIndex, setActiveTrackIndex] = useState<number | null>(null);
   const [hoveredTrackIndex, setHoveredTrackIndex] = useState<number | null>(null);
   const [burstingTrackIndex, setBurstingTrackIndex] = useState<number | null>(null);
@@ -3505,6 +3572,8 @@ export default function Home() {
   const journalIssue = String(journalPage + 1).padStart(2, "0");
   const memoryDemoPhoto = photographCollections[0][0];
   const memoryDemoStage = MEMORY_DEMO_STAGES[memoryDemoStep];
+  const selectedVocabularyWordCount = useMemo(() => getSelectedVocabularyWordSet(selectedVocabularyLists).size, [selectedVocabularyLists]);
+  const selectedVocabularyLabel = selectedVocabularyLists.map((list) => t(vocabularyListNameKeys[list])).join(" + ");
 
   const nextTrack = useMemo(() => {
     if (activeTrackIndex === null) return null;
@@ -3520,6 +3589,7 @@ export default function Home() {
 
     setSelected(null);
     setMenuOpen(false);
+    setLexiconPickerOpen(false);
     setActiveTrackIndex(null);
     setArchiveOpen(false);
     setStudyAnswer(null);
@@ -3572,6 +3642,11 @@ export default function Home() {
         if (typeof stored.xp === "number" && Number.isFinite(stored.xp)) setXp(Math.max(0, stored.xp));
         if (stored.preferences?.locale === "en" || stored.preferences?.locale === "zh") {
           setLocale(stored.preferences.locale);
+        }
+        if (Array.isArray(stored.preferences?.vocabularyLists)) {
+          const availableIds = new Set(vocabularyLists.filter((list) => list.available).map((list) => list.id));
+          const validLists = stored.preferences.vocabularyLists.filter((list): list is VocabularyListId => availableIds.has(list));
+          if (validLists.length) setSelectedVocabularyLists(Array.from(new Set(validLists)));
         }
         if (stored.dailyPractice?.date === today && stored.dailyPractice.counts && typeof stored.dailyPractice.counts === "object") {
           setDailyPractice({
@@ -3661,7 +3736,7 @@ export default function Home() {
       saved,
       completedTracks,
       xp,
-      preferences: { locale },
+      preferences: { locale, vocabularyLists: selectedVocabularyLists },
       dailyPractice,
     };
     try {
@@ -3670,7 +3745,7 @@ export default function Home() {
     } catch {
       setStorageError(true);
     }
-  }, [completedTracks, dailyPractice, locale, records, saved, storageReady, xp]);
+  }, [completedTracks, dailyPractice, locale, records, saved, selectedVocabularyLists, storageReady, xp]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -3826,9 +3901,13 @@ export default function Home() {
     });
   };
 
+  const toggleVocabularyList = (listId: VocabularyListId) => {
+    setSelectedVocabularyLists((current) => current.includes(listId) ? (current.length === 1 ? current : current.filter((list) => list !== listId)) : [...current, listId]);
+  };
+
   const openTrack = (track: Track) => {
     const index = learningTracks.findIndex((item) => item.index === track.index);
-    const queue = buildQueue(track, records);
+    const queue = buildQueue(track, records, selectedVocabularyLists);
     setActiveTrackIndex(index);
     setTaskQueue(queue);
     setTaskStep(0);
@@ -3892,7 +3971,7 @@ export default function Home() {
     setHoveredTrackIndex(null);
 
     const tourTrack = learningTracks[0];
-    const tourQueue = buildQueue(tourTrack, records);
+    const tourQueue = buildQueue(tourTrack, records, selectedVocabularyLists);
     setVideoTourPhase("question");
     setActiveTrackIndex(0);
     setTaskQueue(tourQueue);
@@ -4005,7 +4084,7 @@ export default function Home() {
     if (activeTrackIndex === null) return;
     const nextIndex = (activeTrackIndex + 1) % learningTracks.length;
     setActiveTrackIndex(nextIndex);
-    setTaskQueue(buildQueue(learningTracks[nextIndex], records));
+    setTaskQueue(buildQueue(learningTracks[nextIndex], records, selectedVocabularyLists));
     setTaskStep(0);
     setTaskAnswer(null);
     setInspectedOption(null);
@@ -4167,6 +4246,12 @@ export default function Home() {
           <p className="overline">{t("dailyPractice")}</p>
           <h2>{t("practiceTitleA")}<br /><em>{t("practiceTitleB")}</em></h2>
           <p>{t("practiceIntro")}</p>
+          <button className="lexicon-picker-trigger" onClick={() => setLexiconPickerOpen(true)} aria-haspopup="dialog" aria-expanded={lexiconPickerOpen}>
+            <span>{t("wordLists")}</span>
+            <strong>{selectedVocabularyLabel}</strong>
+            <small>{t("selectedWordCount", { count: selectedVocabularyWordCount })}</small>
+            <b aria-hidden="true">+</b>
+          </button>
         </div>
         <div className="task-list">
           <PracticeGlassScene
@@ -4413,6 +4498,35 @@ export default function Home() {
         </div>
       )}
 
+      {lexiconPickerOpen && (
+        <div className="lexicon-picker-overlay" role="dialog" aria-modal="true" aria-label={t("wordListsAria")}>
+          <button className="modal-close" onClick={() => setLexiconPickerOpen(false)}>{t("close")}</button>
+          <div className="lexicon-picker-heading">
+            <p className="overline">{t("wordLists")}</p>
+            <h3>{t("vocabularyListPickerTitle")}</h3>
+            <p>{t("vocabularyListPickerIntro")}</p>
+          </div>
+          <fieldset className="lexicon-picker-options">
+            <legend className="sr-only">{t("wordListsAria")}</legend>
+            {vocabularyLists.map((list, index) => {
+              const checked = selectedVocabularyLists.includes(list.id);
+              return (
+                <label className={"lexicon-picker-option" + (list.available ? "" : " is-unavailable")} key={list.id}>
+                  <input type="checkbox" checked={checked} disabled={!list.available} onChange={() => toggleVocabularyList(list.id)} />
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <span className="lexicon-picker-copy"><strong>{t(vocabularyListNameKeys[list.id])}</strong><small>{t(vocabularyListDescriptionKeys[list.id])}</small></span>
+                  <em>{list.available ? t("selectedWordCount", { count: getVocabularyListCount(list.id) }) : t("comingNext")}</em>
+                </label>
+              );
+            })}
+          </fieldset>
+          <div className="lexicon-picker-footer">
+            <p>{t("activeWordPool", { count: selectedVocabularyWordCount })}<small>{t("atLeastOneList")}</small></p>
+            <button onClick={() => setLexiconPickerOpen(false)}>{t("done")}</button>
+          </div>
+        </div>
+      )}
+
       {activeTrack && (
         <div className={`task-overlay${taskAnswer ? " has-answer" : ""}`} role="dialog" aria-modal="true" aria-label={t("exerciseAria", { track: localizedTrack(activeTrack).name })}>
           <button className="modal-close" onClick={closeAll}>{t("close")}</button>
@@ -4532,7 +4646,10 @@ export default function Home() {
               <h3 data-word={selected.word}>{selected.word}</h3>
               <button onClick={() => toggleSave(selected.word)} aria-label={t("saveWord")}>{saved.includes(selected.word) ? t("savedState") : t("save")}</button>
             </div>
-            <span className="phonetic">{phoneticGlossary[selected.word]} · {selected.part}</span>
+            <div className="study-phonetic-row">
+              <span className="phonetic">{phoneticGlossary[selected.word]} · {selected.part}</span>
+              <PronunciationButton word={selected.word} locale={locale} />
+            </div>
             <span className={getLevelClassName(selected.word)}>{wordLevelGlossary[selected.word]}</span>
             <p className="cn-definition">{chineseGlossary[selected.word]}</p>
             {selected.definition !== chineseGlossary[selected.word] && <p className="definition">{selected.definition}</p>}
