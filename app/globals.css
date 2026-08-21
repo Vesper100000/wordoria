@@ -47,7 +47,7 @@ html,body{overflow-x:clip!important}main{overflow:visible!important;perspective:
 
 .record-phonetic{display:block;margin:6px 0 10px;font:12px/1.2 Georgia,serif!important;color:#7a7a72;letter-spacing:.02em}.meaning-phonetic{display:inline-block;margin:0 5px;color:#6b6b63;font-family:Georgia,serif;font-style:italic}.phonetic{font-style:italic}
 
-.level-tag{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(17,17,15,.45);border-radius:999px;padding:5px 8px;margin:6px 8px 6px 0;font:800 8px/1 Arial,Helvetica,sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--ink);background:rgba(255,255,255,.42)}.level-cet-4{background:#f7ff6a;border-color:#111}.level-cet-6{background:#dcd3ff;border-color:#705cff;color:#21135f}.level-contest{background:#111;color:#f7ff6a;border-color:#111}.level-visual{background:#ffd9cf;border-color:#ff6f55;color:#5b170c}.level-advanced{background:#111;color:#fff;border-color:#111}.record-card .level-tag,.task-feedback .level-tag,.study-copy>.level-tag{margin-top:4px;margin-bottom:10px}.archive-stats{flex-wrap:wrap;gap:18px 0}.archive-stats span{min-width:96px}
+.level-tag{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(17,17,15,.45);border-radius:999px;padding:5px 8px;margin:6px 8px 6px 0;font:800 8px/1 Arial,Helvetica,sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--ink);background:rgba(255,255,255,.42)}.word-list-tags{display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:5px}.word-list-tag{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(17,17,15,.55);border-radius:2px;padding:5px 7px;font:800 8px/1 Arial,Helvetica,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:rgba(255,255,255,.48)}.list-gaokao{background:#dff2c8;border-color:#52723f}.list-cet4{background:#f7ff6a;border-color:#111}.list-cet6{background:#dcd3ff;border-color:#705cff;color:#21135f}.list-ielts{background:#d8ecff;border-color:#4f7fa8;color:#173b5c}.list-visual{background:#ffd9cf;border-color:#ff6f55;color:#5b170c}.list-advanced{background:#111;color:#fff;border-color:#111}.record-card .word-list-tags,.task-feedback .word-list-tags,.study-copy>.word-list-tags{justify-content:flex-start;margin:4px 0 10px}.level-cet-4{background:#f7ff6a;border-color:#111}.level-cet-6{background:#dcd3ff;border-color:#705cff;color:#21135f}.level-contest{background:#111;color:#f7ff6a;border-color:#111}.level-visual{background:#ffd9cf;border-color:#ff6f55;color:#5b170c}.level-advanced{background:#111;color:#fff;border-color:#111}.record-card .level-tag,.task-feedback .level-tag,.study-copy>.level-tag{margin-top:4px;margin-bottom:10px}.archive-stats{flex-wrap:wrap;gap:18px 0}.archive-stats span{min-width:96px}
 
 /* Memory color system: desktop reveals recall strength on hover; touch surfaces show it directly. */
 .photo-button{--memory-gray:1;--memory-filter-saturation:.55;--memory-brightness:.88;--memory-from-gray:1;--memory-from-filter-saturation:.55;--memory-from-brightness:.88;--memory-to-gray:1;--memory-to-filter-saturation:.55;--memory-to-brightness:.88}
@@ -207,7 +207,7 @@ html,body{overflow-x:clip!important}main{overflow:visible!important;perspective:
 .learning-card-meta{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;color:#5f5f58}
 .learning-card-meta em{font:italic 13px/1.2 Georgia,"Times New Roman",serif}
 .pronunciation-button{display:inline-grid;place-items:center;width:28px;aspect-ratio:1;border:1px solid #8b8b83;background:transparent;color:var(--ink);padding:0;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease}.pronunciation-button span{font-size:9px;line-height:1;transform:translateX(1px)}.pronunciation-button:hover,.pronunciation-button:focus-visible{background:var(--acid);border-color:var(--ink);transform:scale(1.04)}.study-phonetic-row{display:flex;align-items:center;gap:10px;margin-top:12px}.study-phonetic-row .phonetic{margin-top:0}.study-phonetic-row .pronunciation-button{width:30px}
-.learning-card-meta>span:not(.level-tag){font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0}
+.learning-card-meta>span:not(.word-list-tags){font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0}
 .learning-card-meaning{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px;padding-top:15px;border-top:1px solid var(--line)}
 .learning-card-meaning p{margin:0!important;font:15px/1.45 Georgia,"Times New Roman",serif!important}
 .learning-card-meaning p[lang="zh-CN"]{font-family:"Microsoft YaHei",Arial,sans-serif!important;color:#595952}
@@ -223,7 +223,7 @@ html,body{overflow-x:clip!important}main{overflow:visible!important;perspective:
   .learning-card{padding:16px 0 18px}
   .learning-card-head{grid-template-columns:1fr;gap:12px}
   .learning-card-head h4{font-size:34px}
-  .learning-card-meta{justify-content:flex-start}
+  .learning-card-meta{justify-content:flex-start}.word-list-tags{justify-content:flex-start}
   .learning-card-meaning{grid-template-columns:1fr;gap:8px;margin-top:16px}
   .learning-card-example>p:first-child{font-size:17px!important}
 }

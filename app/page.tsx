@@ -23,10 +23,12 @@ type WordLevel = "CET-4" | "CET-6" | "Contest" | "Visual" | "Advanced";
 type VocabularyList = { id: VocabularyListId; available: boolean };
 
 const vocabularyLists: VocabularyList[] = [
+  { id: "gaokao", available: true },
   { id: "cet4", available: true },
   { id: "cet6", available: true },
-  { id: "gaokao", available: true },
   { id: "ielts", available: true },
+  { id: "visual", available: true },
+  { id: "advanced", available: true },
 ];
 const vocabularyMembershipSets: Record<VocabularyListId, Set<string>> = Object.fromEntries(
   vocabularyListIds.map((listId) => [listId, new Set(vocabularyMemberships[listId])]),
@@ -35,10 +37,12 @@ const defaultVocabularyLists: VocabularyListId[] = ["cet4", "cet6"];
 const vocabularyListNameKeys: Record<VocabularyListId, UiKey> = {
   cet4: "vocabularyListCet4", cet6: "vocabularyListCet6",
   gaokao: "vocabularyListGaokao", ielts: "vocabularyListIelts",
+  visual: "vocabularyListVisual", advanced: "vocabularyListAdvanced",
 };
 const vocabularyListDescriptionKeys: Record<VocabularyListId, UiKey> = {
   cet4: "vocabularyListCet4Description", cet6: "vocabularyListCet6Description",
   gaokao: "vocabularyListGaokaoDescription", ielts: "vocabularyListIeltsDescription",
+  visual: "vocabularyListVisualDescription", advanced: "vocabularyListAdvancedDescription",
 };
 
 type Question = {
@@ -2991,6 +2995,26 @@ function getExampleChinese(entry: WordEntry) {
   return entry.exampleCn?.trim() || null;
 }
 
+function getWordVocabularyLists(word: string) {
+  return vocabularyListIds.filter((listId) => wordMap[word]?.lists?.includes(listId));
+}
+
+function getWordVocabularyLabel(word: string, locale: Locale) {
+  return getWordVocabularyLists(word).map((listId) => translate(locale, vocabularyListNameKeys[listId])).join(" / ");
+}
+
+function WordListTags({ word, locale }: { word: string; locale: Locale }) {
+  const lists = getWordVocabularyLists(word);
+  if (!lists.length) return null;
+
+  return (
+    <span className="word-list-tags" aria-label={getWordVocabularyLabel(word, locale)}>
+      {lists.map((listId) => (
+        <span className={`word-list-tag list-${listId}`} key={listId}>{translate(locale, vocabularyListNameKeys[listId])}</span>
+      ))}
+    </span>
+  );
+}
 function PronunciationButton({ word, locale }: { word: string; locale: Locale }) {
   const speak = () => {
     if (!("speechSynthesis" in window)) return;
@@ -3048,7 +3072,7 @@ function LearningCard({
           <em>{phoneticGlossary[word]}</em>
           <PronunciationButton word={word} locale={locale} />
           <span>{entry.part}</span>
-          <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
+          <WordListTags word={word} locale={locale} />
           {onClose && <button className="learning-card-close" onClick={onClose} aria-label={translate(locale, "closeCard")}>x</button>}
         </div>
       </header>
@@ -3290,7 +3314,7 @@ function getExamPriorityWeight(word: string) {
 }
 
 function isVisualPracticeWord(word: string) {
-  return (wordLevelGlossary[word] ?? getWordLevel(word)) === "Visual";
+  return vocabularyMembershipSets.visual.has(word);
 }
 
 function getVisualPracticeQuota(track: Track) {
@@ -3358,17 +3382,17 @@ function buildQueue(track: Track, records: Record<string, WordRecord>, selectedL
   const selectedWordSet = getSelectedVocabularyWordSet(selectedLists);
   const regularPool = wordBank.filter((entry) => selectedWordSet.has(entry.word));
   const reviewWords = sampleWeighted(
-    Object.entries(records).filter(([word, record]) => Boolean(wordMap[word]) && (selectedWordSet.has(word) || isVisualPracticeWord(word)) && record.missed > 0 && record.missed >= record.correct - 1),
+    Object.entries(records).filter(([word, record]) => Boolean(wordMap[word]) && selectedWordSet.has(word) && record.missed > 0 && record.missed >= record.correct - 1),
     2,
     ([word, record]) => getWordWeight(word, records) + record.missed * 3,
   ).map(([word]) => word);
 
   const chosen = new Set(reviewWords);
-  const visualQuota = Math.min(getVisualPracticeQuota(track), targetCount - reviewWords.length);
+  const visualQuota = selectedLists.includes("visual") ? Math.min(getVisualPracticeQuota(track), targetCount - reviewWords.length) : 0;
   const reviewVisualCount = reviewWords.filter(isVisualPracticeWord).length;
   const neededVisualCount = Math.max(0, visualQuota - reviewVisualCount);
   const visualWords = sampleWeighted(
-    wordBank.filter((entry) => isVisualPracticeWord(entry.word) && !chosen.has(entry.word)),
+    wordBank.filter((entry) => selectedWordSet.has(entry.word) && isVisualPracticeWord(entry.word) && !chosen.has(entry.word)),
     neededVisualCount,
     (entry) => getVisualPracticeWeight(entry.word, records),
   ).map((entry) => entry.word);
@@ -3573,7 +3597,7 @@ export default function Home() {
   const memoryDemoPhoto = photographCollections[0][0];
   const memoryDemoStage = MEMORY_DEMO_STAGES[memoryDemoStep];
   const selectedVocabularyWordCount = useMemo(() => getSelectedVocabularyWordSet(selectedVocabularyLists).size, [selectedVocabularyLists]);
-  const selectedVocabularyLabel = selectedVocabularyLists.map((list) => t(vocabularyListNameKeys[list])).join(" + ");
+  const selectedVocabularyLabel = vocabularyListIds.filter((list) => selectedVocabularyLists.includes(list)).map((list) => t(vocabularyListNameKeys[list])).join(" + ");
 
   const nextTrack = useMemo(() => {
     if (activeTrackIndex === null) return null;
@@ -4139,7 +4163,7 @@ export default function Home() {
           <small>{entry.part} / {recordStatus}</small>
         </div>
         <em className="record-phonetic">{phoneticGlossary[word]}</em>
-        <span className={getLevelClassName(word)}>{wordLevelGlossary[word]}</span>
+        <WordListTags word={word} locale={locale} />
         <p className="record-cn">{chineseGlossary[word]}</p>
         {entry.definition !== chineseGlossary[word] && <p>{entry.definition}</p>}
         <span>{t("seenMissed", { seen: record?.seen ?? 0, missed: record?.missed ?? 0 })}</span>
@@ -4343,7 +4367,7 @@ export default function Home() {
                 >
                   <span className="photo-frame"><img src={photo.image} alt={photo.title} /><i>{t("viewStudy")}</i></span>
                   <span className="photo-meta">
-                    <small>{photo.id} / {photo.category} / {wordLevelGlossary[photo.word]}</small>
+                    <small>{photo.id} / {photo.category} / {getWordVocabularyLabel(photo.word, locale)}</small>
                     <strong>{photo.title}</strong>
                     <em>{photo.word}</em>
                     <span className="memory-status">{t("memoryStatus", { level: String(memory.tier.level).padStart(2, "0"), tier: getMemoryTierLabel(locale, memory.tier.label) })}</span>
@@ -4364,9 +4388,9 @@ export default function Home() {
         <div><p className="overline">{t("personalLexicon")}</p><h2>{t("readyToCollect", { count: wordBank.length }).split("\n")[0]}<br />{t("readyToCollect", { count: wordBank.length }).split("\n")[1]}</h2></div>
         <div className="archive-stats">
           <span><strong>{xp}</strong><small>{t("practiceXp")}</small></span>
-          <span><strong>300</strong><small>{t("cet4Core")}</small></span>
-          <span><strong>300</strong><small>{t("cet6Core")}</small></span>
-          <span><strong>100</strong><small>{t("contestBoost")}</small></span>
+          <span><strong>{getVocabularyListCount("cet4")}</strong><small>{t("cet4Core")}</small></span>
+          <span><strong>{getVocabularyListCount("cet6")}</strong><small>{t("cet6Core")}</small></span>
+          <span><strong>{getVocabularyListCount("advanced")}</strong><small>{t("contestBoost")}</small></span>
           <span><strong>{missedWords.length.toString().padStart(2, "0")}</strong><small>{t("needReview")}</small></span>
           <span><strong>{saved.length.toString().padStart(2, "0")}</strong><small>{t("savedWords")}</small></span>
         </div>
@@ -4650,7 +4674,7 @@ export default function Home() {
               <span className="phonetic">{phoneticGlossary[selected.word]} · {selected.part}</span>
               <PronunciationButton word={selected.word} locale={locale} />
             </div>
-            <span className={getLevelClassName(selected.word)}>{wordLevelGlossary[selected.word]}</span>
+            <WordListTags word={selected.word} locale={locale} />
             <p className="cn-definition">{chineseGlossary[selected.word]}</p>
             {selected.definition !== chineseGlossary[selected.word] && <p className="definition">{selected.definition}</p>}
             <blockquote className="study-example">
@@ -4688,8 +4712,8 @@ export default function Home() {
                             definition: chineseGlossary[selected.word],
                           })
                       : studyAnswer === selected.word
-                        ? `Precisely. ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}. +25 XP`
-                        : `Not quite. ${studyAnswer} ${phoneticGlossary[studyAnswer]} [${wordLevelGlossary[studyAnswer]}] means "${glossary[studyAnswer]}". CN: ${chineseGlossary[studyAnswer]}; ${selected.word} ${phoneticGlossary[selected.word]} [${wordLevelGlossary[selected.word]}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}.`}
+                        ? `Precisely. ${selected.word} ${phoneticGlossary[selected.word]} [${getWordVocabularyLabel(selected.word, locale)}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}. +25 XP`
+                        : `Not quite. ${studyAnswer} ${phoneticGlossary[studyAnswer]} [${getWordVocabularyLabel(studyAnswer, locale)}] means "${glossary[studyAnswer]}". CN: ${chineseGlossary[studyAnswer]}; ${selected.word} ${phoneticGlossary[selected.word]} [${getWordVocabularyLabel(selected.word, locale)}] means "${selected.definition}". CN: ${chineseGlossary[selected.word]}.`}
                   </em>
                   <button className="study-next-button" onClick={openNextStudy}>{t("nextVisualStudy")}</button>
                 </>

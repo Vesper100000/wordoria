@@ -66,8 +66,11 @@ if (new Set(examples).size !== examples.length) failures.push("duplicate example
 if (Object.keys(wordExamples).length !== words.length) failures.push(`example count mismatch: expected ${words.length}, got ${Object.keys(wordExamples).length}`);
 if (words.length !== 1113) failures.push(`word count changed: expected 1113, got ${words.length}`);
 
+const expectedVocabularyListSizes = { cet4: 500, cet6: 500, gaokao: 500, ielts: 500, visual: 46, advanced: 298 };
+
 for (const [listId, listWords] of Object.entries(vocabularyMemberships)) {
-  if (listWords.length !== 500) failures.push(`${listId}: expected 500 words, got ${listWords.length}`);
+  const expectedSize = expectedVocabularyListSizes[listId];
+  if (listWords.length !== expectedSize) failures.push(`${listId}: expected ${expectedSize} words, got ${listWords.length}`);
   if (new Set(listWords).size !== listWords.length) failures.push(`${listId}: duplicate membership found`);
   for (const word of listWords) {
     if (!words.includes(word)) failures.push(`${listId}: unknown word ${word}`);
